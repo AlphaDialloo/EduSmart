@@ -1,0 +1,1 @@
+const mongoose=require('mongoose'); module.exports=mongoose.model('Comment',new mongoose.Schema({postId:{type:String,required:true},authorId:{type:String,required:true},content:{type:String,required:true}},{timestamps:true}));

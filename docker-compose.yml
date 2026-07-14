@@ -1,0 +1,93 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: edusmart_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: edusmart
+      POSTGRES_PASSWORD: edusmart
+      POSTGRES_DB: edusmart_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./database/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  mongo:
+    image: mongo:7
+    container_name: edusmart_mongo
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  api-gateway:
+    build: ./api-gateway
+    ports: ["3000:3000"]
+    environment:
+      PORT: 3000
+      AUTH_SERVICE_URL: http://auth-service:4001
+      USER_SERVICE_URL: http://user-service:4002
+      COURSE_SERVICE_URL: http://course-service:4003
+      PROGRESS_SERVICE_URL: http://progress-service:4004
+      RECOMMENDATION_SERVICE_URL: http://recommendation-service:4005
+      INTERACTION_SERVICE_URL: http://interaction-service:4006
+    depends_on: [auth-service, user-service, course-service, progress-service, recommendation-service, interaction-service]
+
+  auth-service:
+    build: ./auth-service
+    ports: ["4001:4001"]
+    environment: &pg_env
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: edusmart_db
+      DB_USER: edusmart
+      DB_PASSWORD: edusmart
+      JWT_SECRET: edusmart_secret_key
+    depends_on: [postgres]
+
+  user-service:
+    build: ./user-service
+    ports: ["4002:4002"]
+    environment: *pg_env
+    depends_on: [postgres]
+
+  course-service:
+    build: ./course-service
+    ports: ["4003:4003"]
+    environment:
+      MONGO_URI: mongodb://mongo:27017/edusmart_courses
+      JWT_SECRET: edusmart_secret_key
+    depends_on: [mongo]
+
+  progress-service:
+    build: ./progress-service
+    ports: ["4004:4004"]
+    environment: *pg_env
+    depends_on: [postgres]
+
+  recommendation-service:
+    build: ./recommendation-service
+    ports: ["4005:4005"]
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: edusmart_db
+      DB_USER: edusmart
+      DB_PASSWORD: edusmart
+      JWT_SECRET: edusmart_secret_key
+      USER_SERVICE_URL: http://user-service:4002
+      COURSE_SERVICE_URL: http://course-service:4003
+      PROGRESS_SERVICE_URL: http://progress-service:4004
+    depends_on: [postgres, user-service, course-service, progress-service]
+
+  interaction-service:
+    build: ./interaction-service
+    ports: ["4006:4006"]
+    environment:
+      MONGO_URI: mongodb://mongo:27017/edusmart_interactions
+      JWT_SECRET: edusmart_secret_key
+    depends_on: [mongo]
+
+volumes:
+  mongo_data:

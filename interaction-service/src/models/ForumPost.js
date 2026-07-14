@@ -1,0 +1,1 @@
+const mongoose=require('mongoose'); module.exports=mongoose.model('ForumPost',new mongoose.Schema({courseId:{type:String,required:true},authorId:{type:String,required:true},title:{type:String,required:true},content:{type:String,required:true}},{timestamps:true}));
