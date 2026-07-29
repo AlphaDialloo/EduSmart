@@ -33,7 +33,8 @@ services:
       PROGRESS_SERVICE_URL: http://progress-service:4004
       RECOMMENDATION_SERVICE_URL: http://recommendation-service:4005
       INTERACTION_SERVICE_URL: http://interaction-service:4006
-    depends_on: [auth-service, user-service, course-service, progress-service, recommendation-service, interaction-service]
+      SETTINGS_SERVICE_URL: http://settings-service:4007
+    depends_on: [auth-service, user-service, course-service, progress-service, recommendation-service, interaction-service, settings-service]
 
   auth-service:
     build: ./auth-service
@@ -90,7 +91,18 @@ services:
       JWT_SECRET: edusmart_secret_key
     depends_on: [mongo]
 
+
+  settings-service:
+    build: ./settings-service
+    ports: ["4007:4007"]
+    environment:
+      PORT: 4007
+      NODE_ENV: development
+      DATABASE_URL: postgresql://edusmart:edusmart@postgres:5432/edusmart_db
+      JWT_SECRET: edusmart_secret_key
+      CORS_ORIGIN: "*"
+    depends_on: [postgres]
+
 volumes:
   postgres_data:
   mongo_data:
-  
