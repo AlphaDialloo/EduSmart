@@ -46,4 +46,36 @@ router.delete(
   controller.deleteFeatureFlag,
 );
 
+
+router.get(
+  "/countries/memberships",
+  controller.listCountryMembershipSettings,
+);
+
+router.get(
+  "/countries/:countryCode/membership",
+  controller.getCountryMembershipSettings,
+);
+
+router.post(
+  "/countries/memberships",
+  authenticate,
+  authorize("ADMIN", "SUPER_ADMIN"),
+  controller.createCountryMembershipSettings,
+);
+
+router.patch(
+  "/countries/:countryCode/membership",
+  authenticate,
+  authorize("ADMIN", "SUPER_ADMIN"),
+  controller.updateCountryMembershipSettings,
+);
+
+router.delete(
+  "/countries/:countryCode/membership",
+  authenticate,
+  authorize("SUPER_ADMIN"),
+  controller.deleteCountryMembershipSettings,
+);
+
 module.exports = router;

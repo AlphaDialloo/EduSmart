@@ -257,6 +257,151 @@ async function deleteFeatureFlag(key) {
   return result.rows[0] || null;
 }
 
+
+function mapCountryMembershipSettings(row) {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    countryCode: row.country_code,
+    countryName: row.country_name,
+    currency: row.currency,
+    annualInstructorFee: Number(row.annual_instructor_fee),
+    enabled: row.enabled,
+    createdBy: row.created_by,
+    updatedBy: row.updated_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function listCountryMembershipSettings({ enabledOnly = false } = {}) {
+  const result = await pool.query(
+    `
+      SELECT *
+      FROM settings_service.country_membership_settings
+      ${enabledOnly ? "WHERE enabled = TRUE" : ""}
+      ORDER BY country_name ASC
+    `,
+  );
+
+  return result.rows.map(mapCountryMembershipSettings);
+}
+
+async function getCountryMembershipSettings(countryCode) {
+  const result = await pool.query(
+    `
+      SELECT *
+      FROM settings_service.country_membership_settings
+      WHERE country_code = $1
+    `,
+    [String(countryCode).trim().toUpperCase()],
+  );
+
+  return mapCountryMembershipSettings(result.rows[0]);
+}
+
+async function createCountryMembershipSettings(payload, userId) {
+  const result = await pool.query(
+    `
+      INSERT INTO settings_service.country_membership_settings (
+        country_code,
+        country_name,
+        currency,
+        annual_instructor_fee,
+        enabled,
+        created_by,
+        updated_by
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $6)
+      RETURNING *
+    `,
+    [
+      payload.countryCode.trim().toUpperCase(),
+      payload.countryName.trim(),
+      payload.currency.trim().toUpperCase(),
+      Number(payload.annualInstructorFee),
+      payload.enabled ?? true,
+      userId || null,
+    ],
+  );
+
+  return mapCountryMembershipSettings(result.rows[0]);
+}
+
+async function updateCountryMembershipSettings(countryCode, payload, userId) {
+  const fields = {
+    countryName: "country_name",
+    currency: "currency",
+    annualInstructorFee: "annual_instructor_fee",
+    enabled: "enabled",
+  };
+
+  const assignments = [];
+  const values = [];
+  let parameterIndex = 1;
+
+  for (const [property, column] of Object.entries(fields)) {
+    if (Object.prototype.hasOwnProperty.call(payload, property)) {
+      let value = payload[property];
+
+      if (property === "countryName") {
+        value = value.trim();
+      }
+
+      if (property === "currency") {
+        value = value.trim().toUpperCase();
+      }
+
+      if (property === "annualInstructorFee") {
+        value = Number(value);
+      }
+
+      assignments.push(`${column} = $${parameterIndex}`);
+      values.push(value);
+      parameterIndex += 1;
+    }
+  }
+
+  if (assignments.length === 0) {
+    return getCountryMembershipSettings(countryCode);
+  }
+
+  assignments.push(`updated_by = $${parameterIndex}`);
+  values.push(userId || null);
+  parameterIndex += 1;
+
+  assignments.push("updated_at = CURRENT_TIMESTAMP");
+  values.push(String(countryCode).trim().toUpperCase());
+
+  const result = await pool.query(
+    `
+      UPDATE settings_service.country_membership_settings
+      SET ${assignments.join(", ")}
+      WHERE country_code = $${parameterIndex}
+      RETURNING *
+    `,
+    values,
+  );
+
+  return mapCountryMembershipSettings(result.rows[0]);
+}
+
+async function deleteCountryMembershipSettings(countryCode) {
+  const result = await pool.query(
+    `
+      DELETE FROM settings_service.country_membership_settings
+      WHERE country_code = $1
+      RETURNING id, country_code
+    `,
+    [String(countryCode).trim().toUpperCase()],
+  );
+
+  return result.rows[0] || null;
+}
+
 module.exports = {
   ensureDefaultSettings,
   getPlatformSettings,
@@ -266,4 +411,9 @@ module.exports = {
   createFeatureFlag,
   updateFeatureFlag,
   deleteFeatureFlag,
+  listCountryMembershipSettings,
+  getCountryMembershipSettings,
+  createCountryMembershipSettings,
+  updateCountryMembershipSettings,
+  deleteCountryMembershipSettings,
 };

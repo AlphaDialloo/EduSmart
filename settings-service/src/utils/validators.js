@@ -159,7 +159,55 @@ function validateFeatureFlag(payload, partial = false) {
   return errors;
 }
 
+
+function validateCountryMembershipSettings(payload, partial = false) {
+  const errors = [];
+
+  if (!partial || "countryCode" in payload) {
+    if (
+      typeof payload.countryCode !== "string" ||
+      !/^[A-Za-z]{2}$/.test(payload.countryCode.trim())
+    ) {
+      errors.push("countryCode doit être un code ISO de 2 lettres.");
+    }
+  }
+
+  if (!partial || "countryName" in payload) {
+    if (
+      typeof payload.countryName !== "string" ||
+      payload.countryName.trim().length < 2 ||
+      payload.countryName.trim().length > 100
+    ) {
+      errors.push("countryName doit contenir entre 2 et 100 caractères.");
+    }
+  }
+
+  if (!partial || "currency" in payload) {
+    if (
+      typeof payload.currency !== "string" ||
+      !/^[A-Za-z]{3}$/.test(payload.currency.trim())
+    ) {
+      errors.push("currency doit être un code ISO de 3 lettres.");
+    }
+  }
+
+  if (!partial || "annualInstructorFee" in payload) {
+    const amount = Number(payload.annualInstructorFee);
+
+    if (!Number.isFinite(amount) || amount < 0) {
+      errors.push("annualInstructorFee doit être un nombre supérieur ou égal à 0.");
+    }
+  }
+
+  if ("enabled" in payload && typeof payload.enabled !== "boolean") {
+    errors.push("enabled doit être un booléen.");
+  }
+
+  return errors;
+}
+
 module.exports = {
   validatePlatformSettings,
   validateFeatureFlag,
+  validateCountryMembershipSettings,
 };

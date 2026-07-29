@@ -2,6 +2,7 @@ const repository = require("../repositories/settings.repository");
 const {
   validatePlatformSettings,
   validateFeatureFlag,
+  validateCountryMembershipSettings,
 } = require("../utils/validators");
 
 function sendError(res, error) {
@@ -195,6 +196,131 @@ exports.deleteFeatureFlag = async (req, res) => {
     return res.status(200).json({
       message: "Fonctionnalité supprimée avec succès.",
       featureFlag: deleted,
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+
+exports.listCountryMembershipSettings = async (req, res) => {
+  try {
+    const enabledOnly = req.query.enabledOnly === "true";
+
+    const countryMembershipSettings =
+      await repository.listCountryMembershipSettings({ enabledOnly });
+
+    return res.status(200).json({
+      countryMembershipSettings,
+      total: countryMembershipSettings.length,
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+exports.getCountryMembershipSettings = async (req, res) => {
+  try {
+    const countryMembershipSettings =
+      await repository.getCountryMembershipSettings(
+        req.params.countryCode,
+      );
+
+    if (!countryMembershipSettings) {
+      return res.status(404).json({
+        message: "Tarification d'adhésion introuvable pour ce pays.",
+      });
+    }
+
+    return res.status(200).json({
+      countryMembershipSettings,
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+exports.createCountryMembershipSettings = async (req, res) => {
+  try {
+    const errors = validateCountryMembershipSettings(req.body);
+
+    if (errors.length > 0) {
+      return res.status(400).json({
+        message: "Données invalides.",
+        errors,
+      });
+    }
+
+    const countryMembershipSettings =
+      await repository.createCountryMembershipSettings(
+        req.body,
+        req.user.id,
+      );
+
+    return res.status(201).json({
+      message: "Tarification d'adhésion créée avec succès.",
+      countryMembershipSettings,
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+exports.updateCountryMembershipSettings = async (req, res) => {
+  try {
+    const errors = validateCountryMembershipSettings(
+      req.body,
+      true,
+    );
+
+    if (errors.length > 0) {
+      return res.status(400).json({
+        message: "Données invalides.",
+        errors,
+      });
+    }
+
+    const countryMembershipSettings =
+      await repository.updateCountryMembershipSettings(
+        req.params.countryCode,
+        req.body,
+        req.user.id,
+      );
+
+    if (!countryMembershipSettings) {
+      return res.status(404).json({
+        message: "Tarification d'adhésion introuvable pour ce pays.",
+      });
+    }
+
+    return res.status(200).json({
+      message: "Tarification d'adhésion mise à jour avec succès.",
+      countryMembershipSettings,
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+exports.deleteCountryMembershipSettings = async (req, res) => {
+  try {
+    const deleted =
+      await repository.deleteCountryMembershipSettings(
+        req.params.countryCode,
+      );
+
+    if (!deleted) {
+      return res.status(404).json({
+        message: "Tarification d'adhésion introuvable pour ce pays.",
+      });
+    }
+
+    return res.status(200).json({
+      message: "Tarification d'adhésion supprimée avec succès.",
+      countryMembershipSettings: {
+        id: deleted.id,
+        countryCode: deleted.country_code,
+      },
     });
   } catch (error) {
     return sendError(res, error);

@@ -125,3 +125,47 @@ VALUES
       TRUE
     )
 ON CONFLICT (key) DO NOTHING;
+
+
+
+CREATE TABLE IF NOT EXISTS settings_service.country_membership_settings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    country_code VARCHAR(2) NOT NULL UNIQUE,
+    country_name VARCHAR(100) NOT NULL,
+
+    currency VARCHAR(3) NOT NULL,
+    annual_instructor_fee NUMERIC(12, 2) NOT NULL,
+
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+
+    created_by UUID,
+    updated_by UUID,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT country_membership_country_code_check
+        CHECK (country_code ~ '^[A-Z]{2}$'),
+
+    CONSTRAINT country_membership_currency_check
+        CHECK (currency ~ '^[A-Z]{3}$'),
+
+    CONSTRAINT country_membership_fee_check
+        CHECK (annual_instructor_fee >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_country_membership_enabled
+ON settings_service.country_membership_settings(enabled);
+
+INSERT INTO settings_service.country_membership_settings (
+    country_code,
+    country_name,
+    currency,
+    annual_instructor_fee,
+    enabled
+)
+VALUES
+    ('CA', 'Canada', 'CAD', 120.00, TRUE),
+    ('CM', 'Cameroun', 'XAF', 25000.00, TRUE)
+ON CONFLICT (country_code) DO NOTHING;

@@ -40,3 +40,14 @@ Exécuter le fichier :
 ```bash
 psql -U edusmart -d edusmart_db -f database/settings_service.sql
 ```
+
+
+## Tarification annuelle des formateurs par pays
+
+- `GET /api/settings/countries/memberships`
+- `GET /api/settings/countries/:countryCode/membership`
+- `POST /api/settings/countries/memberships`
+- `PATCH /api/settings/countries/:countryCode/membership`
+- `DELETE /api/settings/countries/:countryCode/membership`
+
+Les routes d’écriture exigent un administrateur. La suppression exige `SUPER_ADMIN`.
