@@ -12,6 +12,12 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U edusmart -d edusmart_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   mongo:
     image: mongo:7
@@ -24,7 +30,8 @@ services:
 
   api-gateway:
     build: ./api-gateway
-    ports: ["3000:3000"]
+    ports:
+      - "3000:3000"
     environment:
       PORT: 3000
       AUTH_SERVICE_URL: http://auth-service:4001
@@ -34,11 +41,21 @@ services:
       RECOMMENDATION_SERVICE_URL: http://recommendation-service:4005
       INTERACTION_SERVICE_URL: http://interaction-service:4006
       SETTINGS_SERVICE_URL: http://settings-service:4007
-    depends_on: [auth-service, user-service, course-service, progress-service, recommendation-service, interaction-service, settings-service]
+      SUBSCRIPTION_SERVICE_URL: http://subscription-service:4008
+    depends_on:
+      - auth-service
+      - user-service
+      - course-service
+      - progress-service
+      - recommendation-service
+      - interaction-service
+      - settings-service
+      - subscription-service
 
   auth-service:
     build: ./auth-service
-    ports: ["4001:4001"]
+    ports:
+      - "4001:4001"
     environment: &pg_env
       DB_HOST: postgres
       DB_PORT: 5432
@@ -46,31 +63,42 @@ services:
       DB_USER: edusmart
       DB_PASSWORD: edusmart
       JWT_SECRET: edusmart_secret_key
-    depends_on: [postgres]
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   user-service:
     build: ./user-service
-    ports: ["4002:4002"]
+    ports:
+      - "4002:4002"
     environment: *pg_env
-    depends_on: [postgres]
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   course-service:
     build: ./course-service
-    ports: ["4003:4003"]
+    ports:
+      - "4003:4003"
     environment:
       MONGO_URI: mongodb://mongo:27017/edusmart_courses
       JWT_SECRET: edusmart_secret_key
-    depends_on: [mongo]
+    depends_on:
+      - mongo
 
   progress-service:
     build: ./progress-service
-    ports: ["4004:4004"]
+    ports:
+      - "4004:4004"
     environment: *pg_env
-    depends_on: [postgres]
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   recommendation-service:
     build: ./recommendation-service
-    ports: ["4005:4005"]
+    ports:
+      - "4005:4005"
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
@@ -81,27 +109,61 @@ services:
       USER_SERVICE_URL: http://user-service:4002
       COURSE_SERVICE_URL: http://course-service:4003
       PROGRESS_SERVICE_URL: http://progress-service:4004
-    depends_on: [postgres, user-service, course-service, progress-service]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      user-service:
+        condition: service_started
+      course-service:
+        condition: service_started
+      progress-service:
+        condition: service_started
 
   interaction-service:
     build: ./interaction-service
-    ports: ["4006:4006"]
+    ports:
+      - "4006:4006"
     environment:
       MONGO_URI: mongodb://mongo:27017/edusmart_interactions
       JWT_SECRET: edusmart_secret_key
-    depends_on: [mongo]
-
+    depends_on:
+      - mongo
 
   settings-service:
     build: ./settings-service
-    ports: ["4007:4007"]
+    ports:
+      - "4007:4007"
     environment:
       PORT: 4007
       NODE_ENV: development
       DATABASE_URL: postgresql://edusmart:edusmart@postgres:5432/edusmart_db
       JWT_SECRET: edusmart_secret_key
       CORS_ORIGIN: "*"
-    depends_on: [postgres]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  subscription-service:
+    build:
+      context: ./subscription-service
+    container_name: edusmart_subscription_service
+    restart: unless-stopped
+    ports:
+      - "4008:4008"
+    environment:
+      PORT: 4008
+      NODE_ENV: development
+      DATABASE_URL: postgresql://edusmart:edusmart@postgres:5432/edusmart_db
+      JWT_SECRET: edusmart_secret_key
+      SETTINGS_SERVICE_URL: http://settings-service:4007
+      INTERNAL_SERVICE_SECRET: edusmart_internal_service_secret
+      CORS_ORIGIN: "*"
+      HTTP_TIMEOUT_MS: 5000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      settings-service:
+        condition: service_started
 
 volumes:
   postgres_data:
