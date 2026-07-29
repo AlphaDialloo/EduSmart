@@ -10,6 +10,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
+      - postgres_data:/var/lib/postgresql/data
       - ./database/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
 
   mongo:
@@ -90,4 +91,6 @@ services:
     depends_on: [mongo]
 
 volumes:
+  postgres_data:
   mongo_data:
+  
