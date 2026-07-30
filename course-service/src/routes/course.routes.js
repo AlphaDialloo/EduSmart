@@ -4,114 +4,154 @@ const courseController = require("../controllers/course.controller");
 
 const { authenticate, authorize } = require("../middlewares/auth.middleware");
 
+const instructorOrAdmin = [authenticate, authorize("INSTRUCTOR", "ADMIN")];
+
+const verifyInternal = require("../middlewares/internal.middleware");
+
 // Liste des cours publiés
 router.get("/", courseController.list);
 
-// Détail public d’un cours publié
-router.get("/:id", courseController.getOne);
-
-router.use(authenticate);
-
+// Liste des cours de l’instructeur connecté
 router.get(
   "/management/my-courses",
-  authorize("INSTRUCTOR", "ADMIN"),
+  ...instructorOrAdmin,
   courseController.listMine,
 );
 
 router.get(
+  "/student/enrollments",
+  authenticate,
+  authorize("STUDENT"),
+  courseController.getStudentCourses,
+);
+
+router.get(
+  "/student/enrollments/:courseId",
+  authenticate,
+  authorize("STUDENT"),
+  courseController.getStudentCourseById,
+);
+
+// Détail complet d’un cours pour sa gestion
+router.get(
   "/management/:id",
-  authorize("INSTRUCTOR", "ADMIN"),
+  ...instructorOrAdmin,
   courseController.getOneForManagement,
 );
 
-router.post("/", authorize("INSTRUCTOR", "ADMIN"), courseController.create);
+// Création d’un cours
+router.post("/", ...instructorOrAdmin, courseController.create);
 
-router.put("/:id", authorize("INSTRUCTOR", "ADMIN"), courseController.update);
+// Modification d’un cours
+router.put("/:id", ...instructorOrAdmin, courseController.update);
 
-router.post(
-  "/:id/modules",
-  authorize("INSTRUCTOR", "ADMIN"),
-  courseController.addModule,
-);
+router.post("/:id/modules", ...instructorOrAdmin, courseController.addModule);
 
 router.put(
   "/:courseId/modules/:moduleId",
-  authorize("INSTRUCTOR", "ADMIN"),
+  ...instructorOrAdmin,
   courseController.updateModule,
 );
 
 router.delete(
   "/:courseId/modules/:moduleId",
-  authorize("INSTRUCTOR", "ADMIN"),
+  ...instructorOrAdmin,
   courseController.deleteModule,
 );
 
 router.post(
   "/:courseId/modules/:moduleId/resources",
-  authorize("INSTRUCTOR", "ADMIN"),
+  ...instructorOrAdmin,
   courseController.addResource,
 );
 
 router.put(
   "/:courseId/modules/:moduleId/resources/:resourceId",
-  authorize("INSTRUCTOR", "ADMIN"),
+  ...instructorOrAdmin,
   courseController.updateResource,
 );
 
 router.delete(
   "/:courseId/modules/:moduleId/resources/:resourceId",
-  authorize("INSTRUCTOR", "ADMIN"),
+  ...instructorOrAdmin,
   courseController.deleteResource,
 );
 
 router.post(
   "/:courseId/quizzes",
-  authorize("INSTRUCTOR", "ADMIN"),
+  ...instructorOrAdmin,
   courseController.addQuiz,
 );
 
 router.get(
   "/:courseId/quizzes",
-  authorize("INSTRUCTOR", "ADMIN"),
+  ...instructorOrAdmin,
   courseController.listQuizzes,
 );
 
 router.get(
   "/:courseId/quizzes/:quizId",
-  authorize("INSTRUCTOR", "ADMIN"),
+  ...instructorOrAdmin,
   courseController.getQuiz,
 );
 
 router.put(
   "/:courseId/quizzes/:quizId",
-  authorize("INSTRUCTOR", "ADMIN"),
+  ...instructorOrAdmin,
   courseController.updateQuiz,
 );
 
 router.delete(
   "/:courseId/quizzes/:quizId",
-  authorize("INSTRUCTOR", "ADMIN"),
+  ...instructorOrAdmin,
   courseController.deleteQuiz,
 );
 
-router.post("/:courseId/quizzes/:quizId/submit", courseController.submitQuiz);
-
-router.patch(
-  "/:id/publish",
-  authorize("INSTRUCTOR", "ADMIN"),
-  courseController.publish,
+// Soumission d’un quiz par un utilisateur connecté
+router.post(
+  "/:courseId/quizzes/:quizId/submit",
+  authenticate,
+  courseController.submitQuiz,
 );
+
+/*
+|--------------------------------------------------------------------------
+| Publication et archivage
+|--------------------------------------------------------------------------
+*/
+
+router.patch("/:id/publish", ...instructorOrAdmin, courseController.publish);
 
 router.patch(
   "/:id/unpublish",
-  authorize("INSTRUCTOR", "ADMIN"),
+  ...instructorOrAdmin,
   courseController.unpublish,
 );
 
-router.patch(
-  "/:id/archive",
-  authorize("INSTRUCTOR", "ADMIN"),
-  courseController.archive,
+router.patch("/:id/archive", ...instructorOrAdmin, courseController.archive);
+
+/*
+|--------------------------------------------------------------------------
+| Détail public
+|--------------------------------------------------------------------------
+|
+| Cette route dynamique doit rester après les routes fixes comme
+| /management/my-courses.
+|
+*/
+
+router.get(
+  "/internal/:courseId/payment-details",
+  verifyInternal,
+  courseController.getPaymentDetails,
 );
+
+router.post(
+  "/internal/:courseId/grant-access",
+  verifyInternal,
+  courseController.grantAccess,
+);
+
+router.get("/:id", courseController.getOne);
 
 module.exports = router;

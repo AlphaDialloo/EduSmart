@@ -20,9 +20,17 @@ app.get("/health", (_req, res) => {
   });
 });
 
+/**
+ * Configure un proxy vers un microservice.
+ *
+ * Exemple :
+ * /api/auth/login
+ * devient
+ * http://auth-service:4001/api/auth/login
+ */
 function proxy(publicPath, target) {
   if (!target) {
-    throw new Error(`URL manquante pour ${publicPath}`);
+    throw new Error(`URL du microservice manquante pour ${publicPath}`);
   }
 
   app.use(
@@ -30,29 +38,53 @@ function proxy(publicPath, target) {
     createProxyMiddleware({
       target,
       changeOrigin: true,
+      proxyTimeout: 10000,
+      timeout: 10000,
 
+      /*
+       * Express peut retirer le préfixe utilisé dans app.use().
+       *
+       * Exemple :
+       * URL reçue : /api/auth/login
+       * Chemin vu par le proxy : /login
+       *
+       * Cette fonction remet le préfixe uniquement s’il est absent.
+       */
       pathRewrite: (path) => {
-        // Express retire déjà publicPath.
-        // On le remet pour que le microservice
-        // reçoive le chemin attendu.
+        if (path.startsWith(publicPath)) {
+          return path;
+        }
+
+        if (path === "/") {
+          return publicPath;
+        }
+
         return `${publicPath}${path}`;
       },
-
-      logLevel: "debug",
 
       on: {
         proxyReq: (proxyReq, req) => {
           console.log(
-            `[Gateway] ${req.method} ${req.originalUrl} -> ${target}${publicPath}${req.url}`,
+            `[Gateway] ${req.method} ${req.originalUrl} -> ${target}${proxyReq.path}`,
           );
         },
 
-        error: (err, _req, res) => {
-          console.error(err);
+        proxyRes: (proxyRes, req) => {
+          console.log(
+            `[Gateway] ${req.method} ${req.originalUrl} <- ${proxyRes.statusCode}`,
+          );
+        },
+
+        error: (error, req, res) => {
+          console.error(
+            `[Gateway] Erreur proxy pour ${req.method} ${req.originalUrl} :`,
+            error.message,
+          );
 
           if (!res.headersSent) {
-            res.status(502).json({
+            return res.status(502).json({
               message: "Microservice inaccessible.",
+              servicePath: publicPath,
             });
           }
         },
@@ -61,71 +93,50 @@ function proxy(publicPath, target) {
   );
 }
 
-// ====================
-// AUTH
-// ====================
-
+// Authentification
 proxy("/api/auth", process.env.AUTH_SERVICE_URL);
 
-// ====================
-// USERS
-// ====================
-
+// Utilisateurs
 proxy("/api/users", process.env.USER_SERVICE_URL);
 
-// ====================
-// COURSES
-// ====================
-
+// Cours
 proxy("/api/courses", process.env.COURSE_SERVICE_URL);
 
-// ====================
-// PROGRESS
-// ====================
-
+// Progression
 proxy("/api/progress", process.env.PROGRESS_SERVICE_URL);
 
-// ====================
-// RECOMMENDATIONS
-// ====================
-
+// Recommandations
 proxy("/api/recommendations", process.env.RECOMMENDATION_SERVICE_URL);
 
-// ====================
-// INTERACTIONS
-// ====================
-
+// Interactions
 proxy("/api/interactions", process.env.INTERACTION_SERVICE_URL);
 
-// ====================
-// SETTINGS
-// ====================
-
+// Paramètres
 proxy("/api/settings", process.env.SETTINGS_SERVICE_URL);
 
-// ====================
-// SUBSCRIPTIONS
-// ====================
-
+// Abonnements
 proxy("/api/subscriptions", process.env.SUBSCRIPTION_SERVICE_URL);
 
-// ====================
+// Paiements
+proxy("/api/payments", process.env.PAYMENT_SERVICE_URL);
 
+// Route inexistante dans le Gateway
 app.use((_req, res) => {
   return res.status(404).json({
-    message: "Route introuvable.",
+    message: "Route introuvable dans le Gateway.",
   });
 });
 
-app.use((err, _req, res, _next) => {
-  console.error(err);
+// Gestionnaire global des erreurs
+app.use((error, _req, res, _next) => {
+  console.error("[Gateway] Erreur interne :", error);
 
   return res.status(500).json({
     message: "Erreur interne du Gateway.",
   });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 app.listen(PORT, () => {
   console.log(`API Gateway lancée sur le port ${PORT}`);

@@ -40,12 +40,12 @@ router.post(
   authorize(...instructorRoles),
   controller.cancelPending,
 );
-
 router.get(
   "/internal/instructors/:instructorId/active",
   authenticateInternal,
   controller.checkInstructorActive,
 );
+router.get("/internal/:id", authenticateInternal, controller.getInternalById);
 router.post(
   "/internal/:id/activate",
   authenticateInternal,

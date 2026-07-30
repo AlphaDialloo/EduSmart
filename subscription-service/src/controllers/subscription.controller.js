@@ -109,10 +109,7 @@ exports.getMyStatus = async (req, res) => {
     return res.status(200).json({
       active: true,
       expiresAt: subscription.expiresAt,
-      remainingDays: Math.max(
-        0,
-        Math.ceil(remainingMilliseconds / 86_400_000),
-      ),
+      remainingDays: Math.max(0, Math.ceil(remainingMilliseconds / 86_400_000)),
       subscription,
     });
   } catch (error) {
@@ -146,11 +143,13 @@ exports.checkInstructorActive = async (req, res) => {
       req.params.instructorId,
     );
 
-    return res.status(200).json(
-      subscription
-        ? { active: true, subscription }
-        : { active: false, reason: "NO_ACTIVE_SUBSCRIPTION" },
-    );
+    return res
+      .status(200)
+      .json(
+        subscription
+          ? { active: true, subscription }
+          : { active: false, reason: "NO_ACTIVE_SUBSCRIPTION" },
+      );
   } catch (error) {
     return sendError(res, error);
   }
@@ -285,6 +284,24 @@ exports.expireElapsed = async (_req, res) => {
   try {
     const expiredCount = await repository.expireElapsedSubscriptions();
     return res.status(200).json({ expiredCount });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+exports.getInternalById = async (req, res) => {
+  try {
+    const subscription = await repository.getSubscriptionById(req.params.id);
+
+    if (!subscription) {
+      return res.status(404).json({
+        message: "Adhésion introuvable.",
+      });
+    }
+
+    return res.status(200).json({
+      subscription,
+    });
   } catch (error) {
     return sendError(res, error);
   }

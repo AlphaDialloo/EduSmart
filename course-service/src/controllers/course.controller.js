@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const Course = require("../models/Course");
+const CourseEnrollment = require("../models/courseEnrollment.model");
 
 function isAdmin(user) {
   return user?.role === "ADMIN";
@@ -579,6 +580,15 @@ exports.addModule = async (req, res) => {
       });
     }
 
+    console.log("USER COMPLET :", req.user);
+    console.log("ID UTILISATEUR :", req.user?.id);
+    console.log("RÔLE :", req.user?.role);
+    console.log("ID INSTRUCTEUR DU COURS :", String(course.instructorId));
+    console.log(
+      "CORRESPONDANCE :",
+      String(course.instructorId) === String(req.user?.id),
+    );
+
     if (!canManageCourse(course, req.user)) {
       return res.status(403).json({
         message: "Vous n'êtes pas autorisé à modifier ce cours.",
@@ -656,6 +666,331 @@ exports.updateModule = async (req, res) => {
   }
 };
 
+exports.getPaymentDetails = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const { accessPlanId } = req.query;
+
+    const course = await Course.findById(courseId);
+
+    if (!course) {
+      return res.status(404).json({
+        message: "Cours introuvable.",
+      });
+    }
+
+    console.log("Cours trouvé pour paiement :", {
+      id: String(course._id),
+      status: course.status,
+      isActive: course.isActive,
+      isFree: course.pricing?.isFree,
+      accessPlanId,
+    });
+
+    /*
+     * Le cours est achetable uniquement lorsqu'il est publié
+     * et qu'il n'est pas explicitement désactivé.
+     */
+    if (
+      String(course.status).toUpperCase() !== "PUBLISHED" ||
+      course.isActive === false
+    ) {
+      return res.status(400).json({
+        message: "Ce cours n'est pas disponible à l'achat.",
+        debug: {
+          courseId: String(course._id),
+          status: course.status,
+          isActive: course.isActive,
+        },
+      });
+    }
+
+    if (!course.pricing) {
+      return res.status(400).json({
+        message: "La tarification du cours est introuvable.",
+      });
+    }
+
+    if (course.pricing.isFree) {
+      return res.status(200).json({
+        courseId: String(course._id),
+        instructorId: course.instructorId,
+        title: course.title,
+        countryCode: course.countryCode || "CA",
+        isFree: true,
+        amount: 0,
+        currency: course.pricing.baseCurrency || "CAD",
+        accessPlanId: null,
+        commissionRate: Number(course.pricing.platformCommissionRate) || 0,
+      });
+    }
+
+    if (!accessPlanId) {
+      return res.status(400).json({
+        message: "accessPlanId est obligatoire pour un cours payant.",
+      });
+    }
+
+    const selectedPlan = course.pricing.accessPlans.id(accessPlanId);
+
+    if (!selectedPlan) {
+      return res.status(404).json({
+        message: "Plan d'accès introuvable.",
+      });
+    }
+
+    if (selectedPlan.isActive === false) {
+      return res.status(400).json({
+        message: "Ce plan d'accès n'est pas disponible.",
+      });
+    }
+
+    return res.status(200).json({
+      courseId: String(course._id),
+      instructorId: course.instructorId,
+      title: course.title,
+      countryCode: course.countryCode || "CA",
+      isFree: false,
+      amount: Number(selectedPlan.price),
+      currency: course.pricing.baseCurrency,
+      accessPlanId: String(selectedPlan._id),
+      planType: selectedPlan.planType,
+      durationMonths: selectedPlan.durationMonths,
+      commissionRate: Number(course.pricing.platformCommissionRate) || 0,
+    });
+  } catch (error) {
+    console.error("Erreur getPaymentDetails :", error);
+
+    return res.status(500).json({
+      message: "Erreur lors de la récupération des informations de paiement.",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+};
+
+exports.grantAccess = async (req, res, next) => {
+  try {
+    const { courseId } = req.params;
+    const { studentId, paymentId, accessPlanId } = req.body;
+
+    /*
+    |--------------------------------------------------------------------------
+    | Validation des données reçues
+    |--------------------------------------------------------------------------
+    */
+
+    if (!mongoose.Types.ObjectId.isValid(courseId)) {
+      return res.status(400).json({
+        message: "Identifiant de cours invalide.",
+      });
+    }
+
+    if (!studentId || !paymentId || !accessPlanId) {
+      return res.status(400).json({
+        message: "studentId, paymentId et accessPlanId sont obligatoires.",
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(accessPlanId)) {
+      return res.status(400).json({
+        message: "Identifiant de plan d’accès invalide.",
+      });
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Recherche et validation du cours
+    |--------------------------------------------------------------------------
+    */
+
+    const course = await Course.findById(courseId);
+
+    if (!course) {
+      return res.status(404).json({
+        message: "Cours introuvable.",
+      });
+    }
+
+    if (!course.isActive) {
+      return res.status(409).json({
+        message: "Ce cours est désactivé.",
+      });
+    }
+
+    if (course.status !== "PUBLISHED") {
+      return res.status(409).json({
+        message: "Ce cours n’est pas publié.",
+      });
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Recherche du plan dans pricing.accessPlans
+    |--------------------------------------------------------------------------
+    */
+
+    const accessPlans = course.pricing?.accessPlans;
+
+    if (!accessPlans || accessPlans.length === 0) {
+      return res.status(409).json({
+        message: "Aucun plan d’accès n’est configuré pour ce cours.",
+      });
+    }
+
+    const accessPlan = accessPlans.id(accessPlanId);
+
+    if (!accessPlan) {
+      return res.status(404).json({
+        message: "Plan d’accès introuvable pour ce cours.",
+      });
+    }
+
+    if (!accessPlan.isActive) {
+      return res.status(409).json({
+        message: "Ce plan d’accès n’est plus actif.",
+      });
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Idempotence par paiement
+    |--------------------------------------------------------------------------
+    |
+    | Si ce paiement a déjà accordé un accès, on retourne l'inscription
+    | existante sans créer de doublon.
+    |
+    */
+
+    const existingByPayment = await CourseEnrollment.findOne({
+      paymentId,
+    });
+
+    if (existingByPayment) {
+      return res.status(200).json({
+        message: "L’accès a déjà été accordé pour ce paiement.",
+        enrollment: existingByPayment,
+        created: false,
+      });
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Calcul de la date d’expiration
+    |--------------------------------------------------------------------------
+    */
+
+    const grantedAt = new Date();
+
+    const expiresAt = new Date(grantedAt);
+
+    expiresAt.setMonth(
+      expiresAt.getMonth() + Number(accessPlan.durationMonths),
+    );
+
+    /*
+    |--------------------------------------------------------------------------
+    | Copie des fonctionnalités du plan
+    |--------------------------------------------------------------------------
+    */
+
+    const features =
+      typeof accessPlan.features?.toObject === "function"
+        ? accessPlan.features.toObject()
+        : {
+            courseContent: accessPlan.features?.courseContent ?? true,
+
+            forumAccess: accessPlan.features?.forumAccess ?? false,
+
+            instructorMessaging:
+              accessPlan.features?.instructorMessaging ?? false,
+
+            personalizedFollowUp:
+              accessPlan.features?.personalizedFollowUp ?? false,
+
+            assignmentCorrection:
+              accessPlan.features?.assignmentCorrection ?? false,
+
+            certificateAccess: accessPlan.features?.certificateAccess ?? true,
+          };
+
+    /*
+    |--------------------------------------------------------------------------
+    | Création ou renouvellement de l’inscription
+    |--------------------------------------------------------------------------
+    |
+    | Un étudiant possède une seule inscription par cours.
+    | Un nouvel achat peut renouveler ou remplacer son ancien accès.
+    |
+    */
+
+    const enrollment = await CourseEnrollment.findOneAndUpdate(
+      {
+        courseId: course._id,
+        studentId,
+      },
+      {
+        $set: {
+          paymentId,
+          accessPlanId: accessPlan._id,
+          planType: accessPlan.planType,
+          durationMonths: accessPlan.durationMonths,
+          features,
+          status: "ACTIVE",
+          grantedAt,
+          expiresAt,
+          revokedAt: null,
+        },
+
+        $setOnInsert: {
+          courseId: course._id,
+          studentId,
+        },
+      },
+      {
+        new: true,
+        upsert: true,
+        runValidators: true,
+        setDefaultsOnInsert: true,
+      },
+    );
+
+    return res.status(200).json({
+      message: "Accès au cours accordé.",
+      enrollment,
+      created: true,
+    });
+  } catch (error) {
+    /*
+    |--------------------------------------------------------------------------
+    | Gestion d’une éventuelle concurrence
+    |--------------------------------------------------------------------------
+    |
+    | Deux appels identiques peuvent arriver presque simultanément.
+    | L’index unique sur paymentId empêchera le doublon.
+    |
+    */
+
+    if (error?.code === 11000) {
+      try {
+        const existingEnrollment = await CourseEnrollment.findOne({
+          paymentId: req.body.paymentId,
+        });
+
+        if (existingEnrollment) {
+          return res.status(200).json({
+            message: "L’accès a déjà été accordé pour ce paiement.",
+            enrollment: existingEnrollment,
+            created: false,
+          });
+        }
+      } catch (lookupError) {
+        return next(lookupError);
+      }
+    }
+
+    return next(error);
+  }
+};
 /**
  * DELETE /api/courses/:courseId/modules/:moduleId
  *
@@ -948,6 +1283,228 @@ exports.unpublish = async (req, res) => {
     });
   } catch (error) {
     return sendError(res, error);
+  }
+};
+
+exports.getStudentCourses = async (req, res) => {
+  try {
+    const studentId = req.user?.id || req.user?.userId;
+
+    if (!studentId) {
+      return res.status(401).json({
+        message: "Utilisateur non authentifié.",
+      });
+    }
+
+    const now = new Date();
+
+    const enrollments = await CourseEnrollment.find({
+      studentId,
+      status: "ACTIVE",
+      $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
+    })
+      .sort({ grantedAt: -1 })
+      .lean();
+
+    if (enrollments.length === 0) {
+      return res.status(200).json({
+        count: 0,
+        courses: [],
+      });
+    }
+
+    const courseIds = enrollments.map((enrollment) => enrollment.courseId);
+
+    const courses = await Course.find({
+      _id: { $in: courseIds },
+      isActive: true,
+    }).lean();
+
+    const courseMap = new Map(
+      courses.map((course) => [course._id.toString(), course]),
+    );
+
+    const studentCourses = enrollments
+      .map((enrollment) => {
+        const course = courseMap.get(enrollment.courseId.toString());
+
+        if (!course) {
+          return null;
+        }
+
+        return {
+          enrollmentId: enrollment._id,
+          status: enrollment.status,
+          planType: enrollment.planType,
+          durationMonths: enrollment.durationMonths,
+          grantedAt: enrollment.grantedAt,
+          expiresAt: enrollment.expiresAt,
+          features: enrollment.features,
+          course,
+        };
+      })
+      .filter(Boolean);
+
+    return res.status(200).json({
+      count: studentCourses.length,
+      courses: studentCourses,
+    });
+  } catch (error) {
+    console.error("Erreur récupération cours étudiant :", error);
+
+    return res.status(500).json({
+      message: "Erreur lors de la récupération des cours de l’étudiant.",
+    });
+  }
+};
+
+exports.getStudentCourseById = async (req, res) => {
+  try {
+    const studentId = req.user?.id || req.user?.userId || req.user?.sub;
+
+    const { courseId } = req.params;
+
+    if (!studentId) {
+      return res.status(401).json({
+        message: "Utilisateur non authentifié.",
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(courseId)) {
+      return res.status(400).json({
+        message: "Identifiant de cours invalide.",
+      });
+    }
+
+    const now = new Date();
+
+    const enrollment = await CourseEnrollment.findOne({
+      studentId,
+      courseId,
+      status: "ACTIVE",
+      $or: [
+        { expiresAt: null },
+        { expiresAt: { $exists: false } },
+        { expiresAt: { $gt: now } },
+      ],
+    }).lean();
+
+    if (!enrollment) {
+      return res.status(403).json({
+        message: "Vous n’avez pas accès à ce cours.",
+      });
+    }
+
+    const course = await Course.findOne({
+      _id: courseId,
+      status: "PUBLISHED",
+      isActive: true,
+    })
+      .select(
+        [
+          "_id",
+          "title",
+          "description",
+          "category",
+          "level",
+          "language",
+          "tags",
+          "instructorId",
+          "thumbnailAssetId",
+          "modules",
+          "quizzes",
+          "publishedAt",
+        ].join(" "),
+      )
+      .lean();
+
+    if (!course) {
+      return res.status(404).json({
+        message: "Cours introuvable ou indisponible.",
+      });
+    }
+
+    /*
+     * On ne retourne que les modules actifs.
+     * Les modules sont triés par ordre croissant.
+     * Les ressources inactives sont retirées.
+     * Les ressources sont également triées.
+     */
+    const modules = (course.modules || [])
+      .filter((module) => module.isActive !== false)
+      .sort((a, b) => (a.order || 0) - (b.order || 0))
+      .map((module) => ({
+        _id: module._id,
+        title: module.title,
+        description: module.description,
+        order: module.order,
+
+        resources: (module.resources || [])
+          .filter((resource) => resource.isActive !== false)
+          .sort((a, b) => (a.order || 0) - (b.order || 0))
+          .map((resource) => ({
+            _id: resource._id,
+            title: resource.title,
+            description: resource.description,
+            type: resource.type,
+            durationMinutes: resource.durationMinutes,
+            order: resource.order,
+            isPreview: resource.isPreview,
+
+            videoAssetId:
+              resource.type === "VIDEO" ? resource.videoAssetId : null,
+
+            articleContent:
+              resource.type === "ARTICLE" ? resource.articleContent : null,
+          })),
+      }));
+
+    /*
+     * On filtre également les quiz inactifs, si le schéma
+     * contient le champ isActive.
+     */
+    const quizzes = (course.quizzes || [])
+      .filter((quiz) => quiz.isActive !== false)
+      .sort((a, b) => (a.order || 0) - (b.order || 0))
+      .map((quiz) => ({
+        _id: quiz._id,
+        title: quiz.title,
+        description: quiz.description,
+        order: quiz.order,
+      }));
+
+    return res.status(200).json({
+      enrollment: {
+        id: enrollment._id,
+        status: enrollment.status,
+        planType: enrollment.planType,
+        durationMonths: enrollment.durationMonths,
+        grantedAt: enrollment.grantedAt,
+        expiresAt: enrollment.expiresAt,
+        features: enrollment.features,
+      },
+
+      course: {
+        _id: course._id,
+        title: course.title,
+        description: course.description,
+        category: course.category,
+        level: course.level,
+        language: course.language,
+        tags: course.tags || [],
+        instructorId: course.instructorId,
+        thumbnailAssetId: course.thumbnailAssetId,
+        publishedAt: course.publishedAt,
+        modules,
+        quizzes,
+      },
+    });
+  } catch (error) {
+    console.error("Erreur récupération du cours de l’étudiant :", error);
+
+    return res.status(500).json({
+      message: "Une erreur est survenue lors de la récupération du cours.",
+    });
   }
 };
 

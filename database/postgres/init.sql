@@ -556,3 +556,267 @@ VALUES (
   TRUE
 )
 ON CONFLICT (code) DO NOTHING;
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE SCHEMA IF NOT EXISTS payment_service;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_type
+        WHERE typname = 'payment_type'
+          AND typnamespace = 'payment_service'::regnamespace
+    ) THEN
+        CREATE TYPE payment_service.payment_type AS ENUM (
+            'INSTRUCTOR_MEMBERSHIP',
+            'COURSE_PURCHASE'
+        );
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_type
+        WHERE typname = 'payment_status'
+          AND typnamespace = 'payment_service'::regnamespace
+    ) THEN
+        CREATE TYPE payment_service.payment_status AS ENUM (
+            'PENDING',
+            'PROCESSING',
+            'SUCCEEDED',
+            'FAILED',
+            'CANCELLED',
+            'REFUNDED',
+            'PARTIALLY_REFUNDED'
+        );
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_type
+        WHERE typname = 'payment_provider'
+          AND typnamespace = 'payment_service'::regnamespace
+    ) THEN
+        CREATE TYPE payment_service.payment_provider AS ENUM (
+            'TEST',
+            'STRIPE',
+            'PAYPAL',
+            'ORANGE_MONEY',
+            'MTN_MOMO'
+        );
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_type
+        WHERE typname = 'event_type'
+          AND typnamespace = 'payment_service'::regnamespace
+    ) THEN
+        CREATE TYPE payment_service.event_type AS ENUM (
+            'CREATED',
+            'PROCESSING',
+            'SUCCEEDED',
+            'FAILED',
+            'CANCELLED',
+            'REFUNDED',
+            'PARTIALLY_REFUNDED'
+        );
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_type
+        WHERE typname = 'refund_status'
+          AND typnamespace = 'payment_service'::regnamespace
+    ) THEN
+        CREATE TYPE payment_service.refund_status AS ENUM (
+            'PENDING',
+            'SUCCEEDED',
+            'FAILED'
+        );
+    END IF;
+END
+$$;
+
+CREATE TABLE IF NOT EXISTS payment_service.payment_providers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    code payment_service.payment_provider NOT NULL UNIQUE,
+    name VARCHAR(100) NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    configuration JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS payment_service.payments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    user_id UUID NOT NULL,
+
+    payment_type payment_service.payment_type NOT NULL,
+
+    reference_id VARCHAR(100) NOT NULL,
+
+    provider payment_service.payment_provider NOT NULL DEFAULT 'TEST',
+
+    provider_payment_id VARCHAR(255),
+
+    country_code CHAR(2) NOT NULL,
+
+    currency CHAR(3) NOT NULL,
+
+    amount NUMERIC(12,2) NOT NULL,
+
+    refunded_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+
+    status payment_service.payment_status NOT NULL DEFAULT 'PENDING',
+
+    idempotency_key VARCHAR(120),
+
+    failure_code VARCHAR(100),
+
+    failure_message TEXT,
+
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+
+    paid_at TIMESTAMPTZ,
+
+    cancelled_at TIMESTAMPTZ,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT payments_amount_positive_check
+        CHECK (amount > 0),
+
+    CONSTRAINT payments_refunded_amount_nonnegative_check
+        CHECK (refunded_amount >= 0),
+
+    CONSTRAINT payments_refunded_amount_limit_check
+        CHECK (refunded_amount <= amount),
+
+    CONSTRAINT payments_country_code_check
+        CHECK (country_code ~ '^[A-Z]{2}$'),
+
+    CONSTRAINT payments_currency_check
+        CHECK (currency ~ '^[A-Z]{3}$')
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_payments_idempotency_key
+ON payment_service.payments(idempotency_key)
+WHERE idempotency_key IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS ix_payments_user_id
+ON payment_service.payments(user_id);
+
+CREATE INDEX IF NOT EXISTS ix_payments_reference
+ON payment_service.payments(payment_type, reference_id);
+
+CREATE INDEX IF NOT EXISTS ix_payments_status
+ON payment_service.payments(status);
+
+CREATE INDEX IF NOT EXISTS ix_payments_created_at
+ON payment_service.payments(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS payment_service.payment_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    payment_id UUID NOT NULL
+        REFERENCES payment_service.payments(id)
+        ON DELETE CASCADE,
+
+    event_type payment_service.event_type NOT NULL,
+
+    previous_status payment_service.payment_status,
+
+    new_status payment_service.payment_status,
+
+    message TEXT,
+
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_payment_events_payment_id
+ON payment_service.payment_events(payment_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS payment_service.refunds (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    payment_id UUID NOT NULL
+        REFERENCES payment_service.payments(id),
+
+    requested_by UUID,
+
+    amount NUMERIC(12,2) NOT NULL,
+
+    currency CHAR(3) NOT NULL,
+
+    reason TEXT,
+
+    provider_refund_id VARCHAR(255),
+
+    status payment_service.refund_status NOT NULL DEFAULT 'PENDING',
+
+    failure_message TEXT,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    processed_at TIMESTAMPTZ,
+
+    CONSTRAINT refunds_amount_positive_check
+        CHECK (amount > 0),
+
+    CONSTRAINT refunds_currency_check
+        CHECK (currency ~ '^[A-Z]{3}$')
+);
+
+CREATE INDEX IF NOT EXISTS ix_refunds_payment_id
+ON payment_service.refunds(payment_id);
+
+CREATE TABLE IF NOT EXISTS payment_service.course_purchases (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    payment_id UUID NOT NULL UNIQUE
+        REFERENCES payment_service.payments(id),
+
+    student_id UUID NOT NULL,
+
+    course_id UUID NOT NULL,
+
+    access_status VARCHAR(30) NOT NULL DEFAULT 'PENDING',
+
+    granted_at TIMESTAMPTZ,
+
+    revoked_at TIMESTAMPTZ,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT course_purchase_access_status_check
+        CHECK (access_status IN ('PENDING','GRANTED','REVOKED'))
+);
+
+CREATE INDEX IF NOT EXISTS ix_course_purchases_student_id
+ON payment_service.course_purchases(student_id);
+
+CREATE INDEX IF NOT EXISTS ix_course_purchases_course_id
+ON payment_service.course_purchases(course_id);
+
+INSERT INTO payment_service.payment_providers (
+    code,
+    name,
+    enabled
+)
+VALUES (
+    'TEST',
+    'Fournisseur de paiement de test',
+    TRUE
+)
+ON CONFLICT (code)
+DO UPDATE SET
+    enabled = EXCLUDED.enabled,
+    name = EXCLUDED.name,
+    updated_at = NOW();

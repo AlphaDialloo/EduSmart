@@ -1,1 +1,21 @@
-require('dotenv').config(); const express=require('express'),cors=require('cors'),helmet=require('helmet'),morgan=require('morgan'),connect=require('./config/mongo'); const routes=require('./routes/course.routes'); const app=express(); app.use(cors());app.use(helmet());app.use(morgan('dev'));app.use(express.json());app.get('/health',(_,res)=>res.json({service:'course-service',status:'OK'}));app.use('/courses',routes);connect().then(()=>app.listen(process.env.PORT||4003,()=>console.log('Course Service lancé')));
+require("dotenv").config();
+const express = require("express"),
+  cors = require("cors"),
+  helmet = require("helmet"),
+  morgan = require("morgan"),
+  connect = require("./config/mongo");
+const routes = require("./routes/course.routes");
+const app = express();
+app.use(cors());
+app.use(helmet());
+app.use(morgan("dev"));
+app.use(express.json());
+app.get("/health", (_, res) =>
+  res.json({ service: "course-service", status: "OK" }),
+);
+app.use("/api/courses", routes);
+connect().then(() =>
+  app.listen(process.env.PORT || 4003, () =>
+    console.log("Course Service lancé"),
+  ),
+);

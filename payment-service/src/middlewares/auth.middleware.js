@@ -1,0 +1,5 @@
+const jwt=require('jsonwebtoken');
+function authenticate(req,res,next){const a=req.headers.authorization;if(!a||!a.startsWith('Bearer '))return res.status(401).json({message:"Jeton d'authentification manquant."});try{const p=jwt.verify(a.slice(7),process.env.JWT_SECRET);req.user={id:p.id||p.userId||p.sub,email:p.email,role:p.role,roles:p.roles};if(!req.user.id)return res.status(401).json({message:'Jeton incomplet.'});next();}catch(e){return res.status(401).json({message:'Jeton invalide ou expiré.'});}}
+function authorize(...allowed){const x=allowed.map(r=>String(r).toUpperCase());return(req,res,next)=>{const roles=Array.isArray(req.user?.roles)?req.user.roles:[req.user?.role].filter(Boolean);if(!roles.some(r=>x.includes(String(r).toUpperCase())))return res.status(403).json({message:'Accès refusé.'});next();};}
+function authenticateInternal(req,res,next){if(!process.env.INTERNAL_SERVICE_SECRET||req.headers['x-internal-secret']!==process.env.INTERNAL_SERVICE_SECRET)return res.status(401).json({message:'Authentification interne invalide.'});next();}
+module.exports={authenticate,authorize,authenticateInternal};
