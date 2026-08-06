@@ -32,6 +32,12 @@ router.get(
   courseController.getStudentCourseById,
 );
 
+router.get(
+  "/management/instructor-dashboard",
+  ...instructorOrAdmin,
+  courseController.instructorDashboard,
+);
+
 // Détail complet d’un cours pour sa gestion
 router.get(
   "/management/:id",
@@ -150,6 +156,26 @@ router.post(
   "/internal/:courseId/grant-access",
   verifyInternal,
   courseController.grantAccess,
+);
+router.get(
+  "/admin/summary",
+  authenticate,
+  authorize("ADMIN"),
+  courseController.adminSummary,
+);
+
+router.get(
+  "/admin",
+  authenticate,
+  authorize("ADMIN"),
+  courseController.adminList,
+);
+
+router.patch(
+  "/admin/:id/status",
+  authenticate,
+  authorize("ADMIN"),
+  courseController.adminUpdateStatus,
 );
 
 router.get("/:id", courseController.getOne);

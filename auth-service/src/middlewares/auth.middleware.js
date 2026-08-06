@@ -19,4 +19,15 @@ function authorize(...roles) {
       ? res.status(403).json({ message: "Accès refusé" })
       : next();
 }
-module.exports = { authenticate, authorize };
+function authenticateInternal(req, res, next) {
+  const secret = req.headers["x-internal-secret"];
+
+  if (secret !== process.env.INTERNAL_SERVICE_SECRET) {
+    return res.status(401).json({
+      message: "Secret interne invalide",
+    });
+  }
+
+  next();
+}
+module.exports = { authenticate, authorize, authenticateInternal };

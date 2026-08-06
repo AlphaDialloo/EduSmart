@@ -43,6 +43,8 @@ services:
       SETTINGS_SERVICE_URL: http://settings-service:4007
       SUBSCRIPTION_SERVICE_URL: http://subscription-service:4008
       PAYMENT_SERVICE_URL: http://payment-service:4009
+      JWT_SECRET: edusmart_secret_key
+      INTERNAL_SERVICE_SECRET: edusmart_internal_service_secret
     depends_on:
       - auth-service
       - user-service
@@ -96,7 +98,9 @@ services:
     build: ./progress-service
     ports:
       - "4004:4004"
-    environment: *pg_env
+    environment:
+      <<: *pg_env
+      INTERNAL_SERVICE_SECRET: edusmart_internal_service_secret
     depends_on:
       postgres:
         condition: service_healthy
@@ -186,12 +190,16 @@ services:
       INTERNAL_SERVICE_SECRET: edusmart_internal_service_secret
       SUBSCRIPTION_SERVICE_URL: http://subscription-service:4008
       COURSE_SERVICE_URL: http://course-service:4003
+      PROGRESS_SERVICE_URL: http://progress-service:4004
       CORS_ORIGIN: "*"
     depends_on:
       postgres:
         condition: service_healthy
       subscription-service:
         condition: service_started
+      progress-service:
+        condition: service_started
+
 
 volumes:
   postgres_data:

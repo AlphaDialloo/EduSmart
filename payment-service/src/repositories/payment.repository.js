@@ -67,6 +67,251 @@ async function createPayment(d) {
     c.release();
   }
 }
+async function getInstructorAnalytics(instructorId, months = 6) {
+  const normalizedMonths = Math.min(Math.max(Number(months) || 6, 1), 24);
+
+  const summaryResult = await pool.query(
+    `
+      SELECT
+        COUNT(*)::integer AS sales_count,
+
+        COALESCE(
+          SUM(amount),
+          0
+        )::numeric AS gross_revenue,
+
+        COALESCE(
+          SUM(
+            amount * (
+              1 - COALESCE(
+                (metadata->>'commissionRate')::numeric,
+                0
+              ) / 100
+            )
+          ),
+          0
+        )::numeric AS instructor_revenue,
+
+        COALESCE(
+          SUM(
+            amount * (
+              COALESCE(
+                (metadata->>'commissionRate')::numeric,
+                0
+              ) / 100
+            )
+          ),
+          0
+        )::numeric AS platform_commission,
+
+        COALESCE(
+          SUM(amount) FILTER (
+            WHERE paid_at >= DATE_TRUNC(
+              'month',
+              CURRENT_TIMESTAMP
+            )
+          ),
+          0
+        )::numeric AS current_month_gross_revenue,
+
+        COUNT(*) FILTER (
+          WHERE paid_at >= DATE_TRUNC(
+            'month',
+            CURRENT_TIMESTAMP
+          )
+        )::integer AS current_month_sales
+
+      FROM payment_service.payments
+
+      WHERE payment_type = 'COURSE_PURCHASE'
+        AND status IN (
+          'SUCCEEDED',
+          'PARTIALLY_REFUNDED'
+        )
+        AND metadata->>'instructorId' = $1
+    `,
+    [String(instructorId)],
+  );
+
+  const monthlyResult = await pool.query(
+    `
+      WITH months AS (
+        SELECT GENERATE_SERIES(
+          DATE_TRUNC('month', CURRENT_TIMESTAMP)
+            - (($2::integer - 1) * INTERVAL '1 month'),
+          DATE_TRUNC('month', CURRENT_TIMESTAMP),
+          INTERVAL '1 month'
+        ) AS month_start
+      ),
+
+      sales AS (
+        SELECT
+          DATE_TRUNC('month', paid_at) AS month_start,
+
+          COUNT(*)::integer AS sales,
+
+          COALESCE(
+            SUM(amount),
+            0
+          )::numeric AS gross_revenue,
+
+          COALESCE(
+            SUM(
+              amount * (
+                1 - COALESCE(
+                  (metadata->>'commissionRate')::numeric,
+                  0
+                ) / 100
+              )
+            ),
+            0
+          )::numeric AS instructor_revenue,
+
+          COALESCE(
+            SUM(
+              amount * (
+                COALESCE(
+                  (metadata->>'commissionRate')::numeric,
+                  0
+                ) / 100
+              )
+            ),
+            0
+          )::numeric AS platform_commission
+
+        FROM payment_service.payments
+
+        WHERE payment_type = 'COURSE_PURCHASE'
+          AND status IN (
+            'SUCCEEDED',
+            'PARTIALLY_REFUNDED'
+          )
+          AND metadata->>'instructorId' = $1
+          AND paid_at >= DATE_TRUNC(
+            'month',
+            CURRENT_TIMESTAMP
+          ) - (($2::integer - 1) * INTERVAL '1 month')
+
+        GROUP BY DATE_TRUNC('month', paid_at)
+      )
+
+      SELECT
+        TO_CHAR(
+          months.month_start,
+          'YYYY-MM'
+        ) AS month,
+
+        TO_CHAR(
+          months.month_start,
+          'Mon'
+        ) AS label,
+
+        COALESCE(
+          sales.sales,
+          0
+        )::integer AS sales,
+
+        COALESCE(
+          sales.gross_revenue,
+          0
+        )::numeric AS gross_revenue,
+
+        COALESCE(
+          sales.instructor_revenue,
+          0
+        )::numeric AS instructor_revenue,
+
+        COALESCE(
+          sales.platform_commission,
+          0
+        )::numeric AS platform_commission
+
+      FROM months
+
+      LEFT JOIN sales
+        ON sales.month_start = months.month_start
+
+      ORDER BY months.month_start ASC
+    `,
+    [String(instructorId), normalizedMonths],
+  );
+
+  const recentSalesResult = await pool.query(
+    `
+      SELECT
+        id,
+        user_id,
+        reference_id,
+        currency,
+        amount,
+        refunded_amount,
+        status,
+        metadata,
+        paid_at,
+        created_at
+
+      FROM payment_service.payments
+
+      WHERE payment_type = 'COURSE_PURCHASE'
+        AND status IN (
+          'SUCCEEDED',
+          'PARTIALLY_REFUNDED'
+        )
+        AND metadata->>'instructorId' = $1
+
+      ORDER BY paid_at DESC NULLS LAST
+
+      LIMIT 8
+    `,
+    [String(instructorId)],
+  );
+
+  const summary = summaryResult.rows[0] || {};
+
+  return {
+    summary: {
+      salesCount: Number(summary.sales_count) || 0,
+      grossRevenue: Number(summary.gross_revenue) || 0,
+      instructorRevenue: Number(summary.instructor_revenue) || 0,
+      platformCommission: Number(summary.platform_commission) || 0,
+      currentMonthGrossRevenue:
+        Number(summary.current_month_gross_revenue) || 0,
+      currentMonthSales: Number(summary.current_month_sales) || 0,
+    },
+
+    monthlySales: monthlyResult.rows.map((row) => ({
+      month: row.month,
+      label: row.label,
+      sales: Number(row.sales) || 0,
+      grossRevenue: Number(row.gross_revenue) || 0,
+      instructorRevenue: Number(row.instructor_revenue) || 0,
+      platformCommission: Number(row.platform_commission) || 0,
+    })),
+
+    recentSales: recentSalesResult.rows.map((row) => {
+      const commissionRate = Number(row.metadata?.commissionRate) || 0;
+
+      const amount = Number(row.amount) || 0;
+
+      return {
+        id: row.id,
+        studentId: row.user_id,
+        courseId: row.reference_id,
+        courseTitle: row.metadata?.courseTitle || "Cours EduSmart",
+        planType: row.metadata?.planType || null,
+        currency: row.currency,
+        amount,
+        refundedAmount: Number(row.refunded_amount) || 0,
+        commissionRate,
+        instructorRevenue: amount * (1 - commissionRate / 100),
+        status: row.status,
+        paidAt: row.paid_at,
+        createdAt: row.created_at,
+      };
+    }),
+  };
+}
+
 async function setProviderPayment(id, pid, metadata) {
   const r = await pool.query(
     `UPDATE payment_service.payments SET provider_payment_id=$2,metadata=metadata||$3::JSONB,updated_at=NOW() WHERE id=$1 RETURNING *`,
@@ -245,6 +490,191 @@ async function listEvents(id) {
     )
   ).rows;
 }
+async function getGlobalAnalytics(months = 6) {
+  const normalizedMonths = Math.min(Math.max(Number(months) || 6, 1), 24);
+
+  const summaryResult = await pool.query(`
+    SELECT
+      COUNT(*) FILTER (
+        WHERE status IN ('SUCCEEDED', 'PARTIALLY_REFUNDED')
+      )::INTEGER AS total_sales,
+
+      COALESCE(
+        SUM(amount) FILTER (
+          WHERE status IN ('SUCCEEDED', 'PARTIALLY_REFUNDED')
+        ),
+        0
+      )::NUMERIC AS total_revenue,
+
+      COALESCE(
+        SUM(refunded_amount),
+        0
+      )::NUMERIC AS refunded_amount,
+
+      COUNT(*) FILTER (
+        WHERE status = 'SUCCEEDED'
+      )::INTEGER AS successful_sales,
+
+      COUNT(*) FILTER (
+        WHERE status = 'FAILED'
+      )::INTEGER AS failed_sales,
+
+      COALESCE(
+        SUM(amount) FILTER (
+          WHERE status IN ('SUCCEEDED', 'PARTIALLY_REFUNDED')
+            AND paid_at >= DATE_TRUNC(
+              'month',
+              CURRENT_TIMESTAMP
+            )
+        ),
+        0
+      )::NUMERIC AS current_month_revenue
+
+    FROM payment_service.payments
+  `);
+
+  const monthlyResult = await pool.query(
+    `
+      WITH generated_months AS (
+        SELECT
+          GENERATE_SERIES(
+            DATE_TRUNC('month', CURRENT_TIMESTAMP)
+              - (($1::INTEGER - 1) * INTERVAL '1 month'),
+
+            DATE_TRUNC('month', CURRENT_TIMESTAMP),
+
+            INTERVAL '1 month'
+          ) AS month_start
+      ),
+
+      monthly_payments AS (
+        SELECT
+          DATE_TRUNC('month', paid_at) AS month_start,
+
+          COUNT(*)::INTEGER AS sales,
+
+          COALESCE(
+            SUM(amount),
+            0
+          )::NUMERIC AS revenue
+
+        FROM payment_service.payments
+
+        WHERE status IN (
+          'SUCCEEDED',
+          'PARTIALLY_REFUNDED'
+        )
+          AND paid_at IS NOT NULL
+          AND paid_at >=
+            DATE_TRUNC('month', CURRENT_TIMESTAMP)
+            - (($1::INTEGER - 1) * INTERVAL '1 month')
+
+        GROUP BY DATE_TRUNC('month', paid_at)
+      )
+
+      SELECT
+        TO_CHAR(
+          generated_months.month_start,
+          'YYYY-MM'
+        ) AS "month",
+
+        TO_CHAR(
+          generated_months.month_start,
+          'Mon'
+        ) AS label,
+
+        COALESCE(
+          monthly_payments.sales,
+          0
+        )::INTEGER AS sales,
+
+        COALESCE(
+          monthly_payments.revenue,
+          0
+        )::NUMERIC AS revenue
+
+      FROM generated_months
+
+      LEFT JOIN monthly_payments
+        ON monthly_payments.month_start =
+          generated_months.month_start
+
+      ORDER BY generated_months.month_start ASC
+    `,
+    [normalizedMonths],
+  );
+
+  const recentPaymentsResult = await pool.query(`
+  SELECT
+    id,
+    user_id,
+    payment_type,
+    reference_id,
+    provider,
+    currency,
+    amount,
+    refunded_amount,
+    status,
+    metadata,
+    created_at,
+    paid_at
+
+  FROM payment_service.payments
+
+  WHERE status IN (
+    'SUCCEEDED',
+    'PARTIALLY_REFUNDED'
+  )
+
+  ORDER BY paid_at DESC NULLS LAST
+
+  LIMIT 10
+`);
+
+  const summary = summaryResult.rows[0] || {};
+
+  const monthlyRevenue = monthlyResult.rows.map((row) => ({
+    month: row.month,
+    label: row.label,
+    sales: Number(row.sales) || 0,
+    revenue: Number(row.revenue) || 0,
+  }));
+
+  return {
+    stats: {
+      totalSales: Number(summary.total_sales) || 0,
+      totalRevenue: Number(summary.total_revenue) || 0,
+      refundedAmount: Number(summary.refunded_amount) || 0,
+      successfulSales: Number(summary.successful_sales) || 0,
+      failedSales: Number(summary.failed_sales) || 0,
+      monthlyRevenue: Number(summary.current_month_revenue) || 0,
+    },
+
+    monthlyRevenueSeries: monthlyRevenue,
+
+    monthlySales: monthlyRevenue.map((item) => ({
+      month: item.month,
+      label: item.label,
+      sales: item.sales,
+    })),
+
+    recentPayments: recentPaymentsResult.rows.map((row) => ({
+      id: row.id,
+      userId: row.user_id,
+      paymentType: row.payment_type,
+      referenceId: row.reference_id,
+      provider: row.provider,
+      currency: row.currency,
+      amount: Number(row.amount) || 0,
+      refundedAmount: Number(row.refunded_amount) || 0,
+      status: row.status,
+      courseTitle: row.metadata?.courseTitle || null,
+      createdAt: row.created_at,
+      paidAt: row.paid_at,
+    })),
+  };
+}
+
 module.exports = {
   createPayment,
   setProviderPayment,
@@ -256,4 +686,6 @@ module.exports = {
   markCourseAccessGranted,
   createRefund,
   listEvents,
+  getInstructorAnalytics,
+  getGlobalAnalytics,
 };

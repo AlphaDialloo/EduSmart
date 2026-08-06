@@ -2,10 +2,7 @@ import api, { authConfig } from "./api";
 
 function requireToken(token) {
   if (!token) {
-    const error = new Error(
-      "Token d’authentification manquant.",
-    );
-
+    const error = new Error("Token d’authentification manquant.");
     error.statusCode = 401;
     throw error;
   }
@@ -33,6 +30,180 @@ export async function getInstructorCourses(token) {
   return response.data;
 }
 
+export async function getInstructorCourse(token, courseId) {
+  requireToken(token);
+
+  const response = await api.get(
+    `/courses/management/${courseId}`,
+    authConfig(token),
+  );
+
+  return response.data;
+}
+
+export async function createInstructorCourse(token, payload) {
+  requireToken(token);
+
+  const response = await api.post(
+    "/courses",
+    payload,
+    authConfig(token),
+  );
+
+  return response.data;
+}
+
+export async function updateInstructorCourse(
+  token,
+  courseId,
+  payload,
+) {
+  requireToken(token);
+
+  const response = await api.put(
+    `/courses/${courseId}`,
+    payload,
+    authConfig(token),
+  );
+
+  return response.data;
+}
+
+export async function addCourseModule(
+  token,
+  courseId,
+  payload,
+) {
+  requireToken(token);
+
+  const response = await api.post(
+    `/courses/${courseId}/modules`,
+    payload,
+    authConfig(token),
+  );
+
+  return response.data;
+}
+
+export async function updateCourseModule(
+  token,
+  courseId,
+  moduleId,
+  payload,
+) {
+  requireToken(token);
+
+  const response = await api.put(
+    `/courses/${courseId}/modules/${moduleId}`,
+    payload,
+    authConfig(token),
+  );
+
+  return response.data;
+}
+
+export async function deleteCourseModule(
+  token,
+  courseId,
+  moduleId,
+) {
+  requireToken(token);
+
+  const response = await api.delete(
+    `/courses/${courseId}/modules/${moduleId}`,
+    authConfig(token),
+  );
+
+  return response.data;
+}
+
+export async function addCourseResource(
+  token,
+  courseId,
+  moduleId,
+  payload,
+) {
+  requireToken(token);
+
+  const response = await api.post(
+    `/courses/${courseId}/modules/${moduleId}/resources`,
+    payload,
+    authConfig(token),
+  );
+
+  return response.data;
+}
+
+export async function updateCourseResource(
+  token,
+  courseId,
+  moduleId,
+  resourceId,
+  payload,
+) {
+  requireToken(token);
+
+  const response = await api.put(
+    `/courses/${courseId}/modules/${moduleId}/resources/${resourceId}`,
+    payload,
+    authConfig(token),
+  );
+
+  return response.data;
+}
+
+export async function deleteCourseResource(
+  token,
+  courseId,
+  moduleId,
+  resourceId,
+) {
+  requireToken(token);
+
+  const response = await api.delete(
+    `/courses/${courseId}/modules/${moduleId}/resources/${resourceId}`,
+    authConfig(token),
+  );
+
+  return response.data;
+}
+
+export async function publishInstructorCourse(token, courseId) {
+  requireToken(token);
+
+  const response = await api.patch(
+    `/courses/${courseId}/publish`,
+    {},
+    authConfig(token),
+  );
+
+  return response.data;
+}
+
+export async function unpublishInstructorCourse(token, courseId) {
+  requireToken(token);
+
+  const response = await api.patch(
+    `/courses/${courseId}/unpublish`,
+    {},
+    authConfig(token),
+  );
+
+  return response.data;
+}
+
+export async function archiveInstructorCourse(token, courseId) {
+  requireToken(token);
+
+  const response = await api.patch(
+    `/courses/${courseId}/archive`,
+    {},
+    authConfig(token),
+  );
+
+  return response.data;
+}
+
 export async function getInstructorPaymentAnalytics(
   token,
   months = 6,
@@ -48,23 +219,17 @@ export async function getInstructorPaymentAnalytics(
 }
 
 export async function getCourseCategories() {
-  const response = await api.get(
-    "/course-categories",
-    {
-      params: {
-        active: true,
-        limit: 100,
-      },
+  const response = await api.get("/course-categories", {
+    params: {
+      active: true,
+      limit: 100,
     },
-  );
+  });
 
   return response.data;
 }
 
-export async function uploadCourseThumbnail(
-  token,
-  asset,
-) {
+export async function uploadCourseThumbnail(token, asset) {
   requireToken(token);
 
   const formData = new FormData();
@@ -96,21 +261,6 @@ export async function uploadCourseThumbnail(
       },
       timeout: 60000,
     },
-  );
-
-  return response.data;
-}
-
-export async function createInstructorCourse(
-  token,
-  payload,
-) {
-  requireToken(token);
-
-  const response = await api.post(
-    "/courses",
-    payload,
-    authConfig(token),
   );
 
   return response.data;

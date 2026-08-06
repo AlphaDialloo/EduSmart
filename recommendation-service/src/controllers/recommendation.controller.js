@@ -270,3 +270,13 @@ exports.feedback = async (req, res) => {
     return sendError(res, error);
   }
 };
+
+
+/**
+ * GET /api/recommendations/dashboard
+ * Régénère les recommandations à partir du profil, du dernier quiz et des cours publiés.
+ */
+exports.dashboard = async (req, res) => {
+  req.body = { ...(req.body || {}), limit: 6 };
+  return exports.generate(req, res);
+};

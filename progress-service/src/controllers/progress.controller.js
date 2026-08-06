@@ -122,6 +122,57 @@ exports.enroll = async (req, res) => {
   }
 };
 
+exports.getEnrollmentProgress = async (req, res) => {
+  try {
+    if (!requireUser(req, res)) {
+      return;
+    }
+
+    const enrollmentId = req.params.enrollmentId;
+
+    const enrollmentResult = await pool.query(
+      `
+        SELECT *
+        FROM progress_service.enrollments
+        WHERE id = $1
+          AND user_id = $2
+      `,
+      [enrollmentId, req.user.id],
+    );
+
+    if (!enrollmentResult.rowCount) {
+      return res.status(404).json({
+        message: "Inscription introuvable.",
+      });
+    }
+
+    const resourcesResult = await pool.query(
+      `
+        SELECT
+          id,
+          enrollment_id,
+          module_id,
+          resource_id,
+          progress_percentage,
+          completed,
+          completed_at,
+          last_accessed_at
+        FROM progress_service.resource_progress
+        WHERE enrollment_id = $1
+        ORDER BY last_accessed_at DESC
+      `,
+      [enrollmentId],
+    );
+
+    return res.status(200).json({
+      enrollment: enrollmentResult.rows[0],
+      resources: resourcesResult.rows,
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
 /**
  * GET /api/progress/enrollments/me
  *
@@ -322,9 +373,7 @@ exports.resourceProgress = async (req, res) => {
       enrollment: updatedEnrollmentResult.rows[0],
       progressSummary: {
         totalResources: normalizedTotalResources,
-        startedResources: Number(
-          progressResult.rows[0].started_resources || 0,
-        ),
+        startedResources: Number(progressResult.rows[0].started_resources || 0),
         completedResources: Number(
           progressResult.rows[0].completed_resources || 0,
         ),
@@ -620,6 +669,259 @@ exports.quizSummary = async (req, res) => {
         hasPassed: Boolean(result.rows[0].has_passed),
         lastSubmittedAt: result.rows[0].last_submitted_at,
       },
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+/**
+ * POST /api/progress/learning-time
+ *
+ * Enregistre une tranche courte de temps réellement passée par l'utilisateur
+ * sur une ressource. Le frontend devrait envoyer une tranche toutes les 30 à
+ * 60 secondes uniquement lorsque l'onglet est visible et actif.
+ */
+exports.addLearningTime = async (req, res) => {
+  try {
+    if (!requireUser(req, res)) {
+      return;
+    }
+
+    const {
+      enrollmentId,
+      courseId,
+      moduleId = null,
+      resourceId = null,
+      durationSeconds,
+    } = req.body;
+
+    if (!enrollmentId || !courseId) {
+      return res.status(400).json({
+        message: "enrollmentId et courseId sont obligatoires.",
+      });
+    }
+
+    const normalizedDuration = Number(durationSeconds);
+
+    if (
+      !Number.isInteger(normalizedDuration) ||
+      normalizedDuration < 1 ||
+      normalizedDuration > 300
+    ) {
+      return res.status(400).json({
+        message: "durationSeconds doit être un entier compris entre 1 et 300.",
+      });
+    }
+
+    const enrollmentResult = await pool.query(
+      `
+        SELECT id
+        FROM progress_service.enrollments
+        WHERE id = $1
+          AND user_id = $2
+          AND course_id = $3
+      `,
+      [enrollmentId, req.user.id, String(courseId)],
+    );
+
+    if (!enrollmentResult.rowCount) {
+      return res.status(404).json({
+        message: "Inscription au cours introuvable.",
+      });
+    }
+
+    const result = await pool.query(
+      `
+        INSERT INTO progress_service.learning_sessions (
+          user_id,
+          enrollment_id,
+          course_id,
+          module_id,
+          resource_id,
+          duration_seconds,
+          session_date,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          CURRENT_DATE,
+          CURRENT_TIMESTAMP,
+          CURRENT_TIMESTAMP
+        )
+        RETURNING *
+      `,
+      [
+        req.user.id,
+        enrollmentId,
+        String(courseId),
+        moduleId ? String(moduleId) : null,
+        resourceId ? String(resourceId) : null,
+        normalizedDuration,
+      ],
+    );
+
+    return res.status(201).json({
+      message: "Temps d’apprentissage enregistré.",
+      learningSession: result.rows[0],
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+/**
+ * GET /api/progress/dashboard
+ *
+ * Retourne les statistiques principales de l'étudiant connecté ainsi que ses
+ * inscriptions les plus récentes.
+ */
+exports.dashboard = async (req, res) => {
+  try {
+    if (!requireUser(req, res)) {
+      return;
+    }
+
+    const enrollmentStatsResult = await pool.query(
+      `
+        SELECT
+          COUNT(*) FILTER (
+            WHERE status = 'IN_PROGRESS'
+          )::integer AS active_courses,
+
+          COUNT(*) FILTER (
+            WHERE status = 'COMPLETED'
+          )::integer AS completed_courses,
+
+          COALESCE(
+            ROUND(AVG(progress_percentage)::numeric, 2),
+            0
+          ) AS average_progress
+        FROM progress_service.enrollments
+        WHERE user_id = $1
+      `,
+      [req.user.id],
+    );
+
+    const learningTimeResult = await pool.query(
+      `
+        SELECT
+          COALESCE(SUM(duration_seconds), 0)::bigint
+            AS total_learning_seconds,
+
+          COALESCE(
+            SUM(duration_seconds) FILTER (
+              WHERE session_date >= CURRENT_DATE - INTERVAL '6 days'
+            ),
+            0
+          )::bigint AS weekly_learning_seconds
+        FROM progress_service.learning_sessions
+        WHERE user_id = $1
+      `,
+      [req.user.id],
+    );
+
+    const recentEnrollmentsResult = await pool.query(
+      `
+        SELECT
+          id,
+          course_id,
+          course_title,
+          status,
+          progress_percentage,
+          started_at,
+          completed_at,
+          updated_at
+        FROM progress_service.enrollments
+        WHERE user_id = $1
+        ORDER BY updated_at DESC, started_at DESC
+        LIMIT 5
+      `,
+      [req.user.id],
+    );
+
+    const enrollmentStats = enrollmentStatsResult.rows[0] || {};
+    const learningTime = learningTimeResult.rows[0] || {};
+
+    return res.status(200).json({
+      stats: {
+        activeCourses: Number(enrollmentStats.active_courses) || 0,
+        completedCourses: Number(enrollmentStats.completed_courses) || 0,
+        averageProgress: Number(enrollmentStats.average_progress) || 0,
+        totalLearningSeconds: Number(learningTime.total_learning_seconds) || 0,
+        weeklyLearningSeconds:
+          Number(learningTime.weekly_learning_seconds) || 0,
+      },
+      recentEnrollments: recentEnrollmentsResult.rows,
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+/**
+ * POST /api/progress/internal/enrollments
+ *
+ * Crée ou met à jour une inscription depuis un autre microservice,
+ * par exemple après un paiement réussi.
+ */
+exports.internalEnroll = async (req, res) => {
+  try {
+    const { studentId, courseId, courseTitle } = req.body;
+
+    if (!studentId || !courseId || !courseTitle) {
+      return res.status(400).json({
+        message: "studentId, courseId et courseTitle sont obligatoires.",
+      });
+    }
+
+    const result = await pool.query(
+      `
+        INSERT INTO progress_service.enrollments (
+          user_id,
+          course_id,
+          course_title,
+          status,
+          progress_percentage,
+          started_at,
+          updated_at
+        )
+        VALUES (
+          $1,
+          $2,
+          $3,
+          'IN_PROGRESS',
+          0,
+          CURRENT_TIMESTAMP,
+          CURRENT_TIMESTAMP
+        )
+        ON CONFLICT (user_id, course_id)
+        DO UPDATE SET
+          course_title = EXCLUDED.course_title,
+          status = CASE
+            WHEN progress_service.enrollments.status = 'COMPLETED'
+              THEN progress_service.enrollments.status
+            ELSE 'IN_PROGRESS'
+          END,
+          updated_at = CURRENT_TIMESTAMP
+        RETURNING *
+      `,
+      [
+        String(studentId).trim(),
+        String(courseId).trim(),
+        String(courseTitle).trim(),
+      ],
+    );
+
+    return res.status(201).json({
+      message: "Inscription interne enregistrée.",
+      enrollment: result.rows[0],
     });
   } catch (error) {
     return sendError(res, error);

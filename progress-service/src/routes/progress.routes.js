@@ -1,20 +1,54 @@
 const router = require("express").Router();
 
-const progressController = require("../controllers/progress.controller");
-const { authenticate } = require("../middlewares/auth.middleware");
+const controller = require("../controllers/progress.controller");
+
+const {
+  authenticate,
+  authenticateInternal,
+} = require("../middlewares/auth.middleware");
+
+/*
+|--------------------------------------------------------------------------
+| Routes internes
+|--------------------------------------------------------------------------
+*/
+
+router.post(
+  "/internal/enrollments",
+  authenticateInternal,
+  controller.internalEnroll,
+);
+
+/*
+|--------------------------------------------------------------------------
+| Routes utilisateur
+|--------------------------------------------------------------------------
+*/
 
 router.use(authenticate);
 
-router.post("/enrollments", progressController.enroll);
-router.get("/enrollments/me", progressController.mine);
-
-router.post("/resources/progress", progressController.resourceProgress);
-
-router.post("/quizzes", progressController.quiz);
-router.get("/quizzes", progressController.quizList);
 router.get(
-  "/quizzes/:courseId/:quizId/summary",
-  progressController.quizSummary,
+  "/enrollments/:enrollmentId/progress",
+  controller.getEnrollmentProgress,
 );
+
+// Inscriptions
+router.post("/enrollments", controller.enroll);
+router.get("/enrollments/me", controller.mine);
+
+// Progression des ressources
+router.post("/resources/progress", controller.resourceProgress);
+
+// Temps d'apprentissage
+router.post("/learning-time", controller.addLearningTime);
+
+// Dashboard
+router.get("/dashboard", controller.dashboard);
+
+// Quiz
+router.post("/quizzes", controller.quiz);
+router.get("/quizzes", controller.quizList);
+
+router.get("/quizzes/:courseId/:quizId/summary", controller.quizSummary);
 
 module.exports = router;

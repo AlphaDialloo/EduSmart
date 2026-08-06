@@ -820,3 +820,45 @@ DO UPDATE SET
     enabled = EXCLUDED.enabled,
     name = EXCLUDED.name,
     updated_at = NOW();
+
+CREATE SCHEMA IF NOT EXISTS progress_service;
+
+CREATE TABLE IF NOT EXISTS progress_service.learning_sessions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  user_id UUID NOT NULL,
+  enrollment_id UUID NOT NULL,
+  course_id VARCHAR(100) NOT NULL,
+  module_id VARCHAR(100),
+  resource_id VARCHAR(100),
+
+  duration_seconds INTEGER NOT NULL DEFAULT 0
+    CHECK (duration_seconds >= 0 AND duration_seconds <= 300),
+
+  session_date DATE NOT NULL DEFAULT CURRENT_DATE,
+
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  CONSTRAINT learning_sessions_enrollment_fkey
+    FOREIGN KEY (enrollment_id)
+    REFERENCES progress_service.enrollments(id)
+    ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS ix_learning_sessions_user_date
+  ON progress_service.learning_sessions(user_id, session_date);
+
+CREATE INDEX IF NOT EXISTS ix_learning_sessions_enrollment
+  ON progress_service.learning_sessions(enrollment_id);
+
+CREATE INDEX IF NOT EXISTS ix_learning_sessions_course
+  ON progress_service.learning_sessions(course_id);
+
+
+CREATE INDEX IF NOT EXISTS ix_learning_sessions_user_date
+ON progress_service.learning_sessions(user_id, session_date);
+
+ALTER TABLE auth_service.users
+ADD COLUMN IF NOT EXISTS is_active
+BOOLEAN NOT NULL DEFAULT TRUE;

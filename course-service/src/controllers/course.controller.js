@@ -1,6 +1,46 @@
 const mongoose = require("mongoose");
 const Course = require("../models/Course");
+const CourseCategory = require("../models/CourseCategory");
 const CourseEnrollment = require("../models/courseEnrollment.model");
+
+function findModule(course, moduleId) {
+  const module = course.modules.id(moduleId);
+
+  if (!module) {
+    throw new Error("Module introuvable.");
+  }
+
+  return module;
+}
+
+function findResource(module, resourceId) {
+  const resource = module.resources.id(resourceId);
+
+  if (!resource) {
+    throw new Error("Ressource introuvable.");
+  }
+
+  return resource;
+}
+
+function normalizeResourcePayload(payload) {
+  return {
+    title: payload.title,
+    description: payload.description,
+    type: payload.type,
+    order: payload.order,
+    durationSeconds: payload.durationSeconds || 0,
+    isPreview: payload.isPreview || false,
+    articleContent: payload.articleContent || "",
+    video: payload.video || {},
+    file: payload.file || {},
+    image: payload.image || {},
+    externalUrl: payload.externalUrl || "",
+    thumbnailUrl: payload.thumbnailUrl || "",
+    isDownloadable: payload.isDownloadable || false,
+    isActive: payload.isActive !== undefined ? payload.isActive : true,
+  };
+}
 
 function isAdmin(user) {
   return user?.role === "ADMIN";
@@ -14,6 +54,32 @@ function canManageCourse(course, user) {
   return isAdmin(user) || String(course.instructorId) === String(user.id);
 }
 
+function sanitizeThumbnailPayload(thumbnail, fallbackAltText = "") {
+  if (thumbnail === null) {
+    return {
+      url: null,
+      publicId: null,
+      altText: "",
+    };
+  }
+
+  if (!thumbnail || typeof thumbnail !== "object" || Array.isArray(thumbnail)) {
+    return undefined;
+  }
+
+  const url = thumbnail.url ? String(thumbnail.url).trim() : null;
+  const publicId = thumbnail.publicId
+    ? String(thumbnail.publicId).trim()
+    : null;
+  const altText = String(thumbnail.altText || fallbackAltText || "").trim();
+
+  return {
+    url,
+    publicId,
+    altText,
+  };
+}
+
 function sanitizeCourseCreationPayload(body = {}) {
   const {
     instructorId,
@@ -24,6 +90,17 @@ function sanitizeCourseCreationPayload(body = {}) {
     updatedAt,
     ...allowedData
   } = body;
+
+  const thumbnail = sanitizeThumbnailPayload(
+    allowedData.thumbnail,
+    allowedData.title,
+  );
+
+  if (thumbnail !== undefined) {
+    allowedData.thumbnail = thumbnail;
+  } else {
+    delete allowedData.thumbnail;
+  }
 
   return {
     ...allowedData,
@@ -55,8 +132,33 @@ function sanitizeResourcePayload(body = {}) {
   };
 }
 
+async function validateCourseCategory(categoryId) {
+  if (!categoryId || !mongoose.Types.ObjectId.isValid(categoryId)) {
+    const error = new Error("L’identifiant de la catégorie est invalide.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const category = await CourseCategory.findOne({
+    _id: categoryId,
+    isActive: true,
+  }).select("_id");
+
+  if (!category) {
+    const error = new Error("La catégorie est introuvable ou inactive.");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return category._id;
+}
+
 function sendError(res, error) {
   console.error("Course controller error:", error);
+
+  if (error?.statusCode) {
+    return res.status(error.statusCode).json({ message: error.message });
+  }
 
   if (error instanceof mongoose.Error.CastError) {
     return res.status(400).json({
@@ -314,11 +416,26 @@ exports.addQuiz = async (req, res) => {
 
 exports.create = async (req, res) => {
   try {
+    console.log("Utilisateur authentifié :", req.user);
     const payload = sanitizeCourseCreationPayload(req.body);
+
+    payload.categoryId = await validateCourseCategory(payload.categoryId);
+
+    const fullName = [req.user.firstName, req.user.lastName]
+      .filter(Boolean)
+      .join(" ");
 
     const course = await Course.create({
       ...payload,
+
       instructorId: req.user.id,
+
+      instructor: {
+        firstName: req.user.firstName || null,
+        lastName: req.user.lastName || null,
+        fullName: fullName || "Formateur EduSmart",
+      },
+
       status: "DRAFT",
     });
 
@@ -330,7 +447,6 @@ exports.create = async (req, res) => {
     return sendError(res, error);
   }
 };
-
 exports.list = async (req, res) => {
   try {
     const {
@@ -356,10 +472,23 @@ exports.list = async (req, res) => {
     }
 
     if (category) {
-      filter.category = {
-        $regex: String(category).trim(),
-        $options: "i",
-      };
+      const normalizedCategory = String(category).trim();
+
+      if (mongoose.Types.ObjectId.isValid(normalizedCategory)) {
+        filter.categoryId = normalizedCategory;
+      } else {
+        const matchingCategories = await CourseCategory.find({
+          isActive: true,
+          $or: [
+            { slug: normalizedCategory.toLowerCase() },
+            { name: { $regex: normalizedCategory, $options: "i" } },
+          ],
+        }).select("_id");
+
+        filter.categoryId = {
+          $in: matchingCategories.map((item) => item._id),
+        };
+      }
     }
 
     if (language) {
@@ -367,7 +496,6 @@ exports.list = async (req, res) => {
     }
 
     if (planType) {
-      filter.pricing = filter.pricing || {};
       filter["pricing.accessPlans"] = {
         $elemMatch: {
           planType: String(planType).toUpperCase(),
@@ -406,6 +534,7 @@ exports.list = async (req, res) => {
 
     const [courses, total] = await Promise.all([
       Course.find(filter, projection)
+        .populate("categoryId", "name slug icon image parentCategory")
         .sort(sort)
         .skip((normalizedPage - 1) * normalizedLimit)
         .limit(normalizedLimit)
@@ -458,7 +587,7 @@ exports.getOne = async (req, res) => {
       _id: req.params.id,
       status: "PUBLISHED",
       isActive: true,
-    });
+    }).populate("categoryId", "name slug icon image parentCategory");
 
     if (!course) {
       return res.status(404).json({
@@ -478,7 +607,10 @@ exports.getOne = async (req, res) => {
 
 exports.getOneForManagement = async (req, res) => {
   try {
-    const course = await Course.findById(req.params.id);
+    const course = await Course.findById(req.params.id).populate(
+      "categoryId",
+      "name slug icon image parentCategory isActive",
+    );
 
     if (!course) {
       return res.status(404).json({
@@ -508,9 +640,11 @@ exports.listMine = async (req, res) => {
           instructorId: req.user.id,
         };
 
-    const courses = await Course.find(filter).sort({
-      updatedAt: -1,
-    });
+    const courses = await Course.find(filter)
+      .populate("categoryId", "name slug icon image parentCategory isActive")
+      .sort({
+        updatedAt: -1,
+      });
 
     return res.status(200).json({
       courses,
@@ -557,7 +691,40 @@ exports.update = async (req, res) => {
       delete allowedData[field];
     }
 
-    Object.assign(course, allowedData);
+    if (Object.prototype.hasOwnProperty.call(allowedData, "categoryId")) {
+      allowedData.categoryId = await validateCourseCategory(
+        allowedData.categoryId,
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(allowedData, "thumbnail")) {
+      const thumbnail = sanitizeThumbnailPayload(
+        allowedData.thumbnail,
+        allowedData.title || course.title,
+      );
+
+      if (thumbnail === undefined) {
+        return res.status(400).json({
+          message: "Le format de l'image du cours est invalide.",
+        });
+      }
+
+      allowedData.thumbnail = thumbnail;
+    }
+
+    course.title = allowedData.title ?? course.title;
+
+    course.description = allowedData.description ?? course.description;
+
+    course.language = allowedData.language ?? course.language;
+
+    course.level = allowedData.level ?? course.level;
+
+    course.tags = allowedData.tags ?? course.tags;
+
+    course.thumbnail = allowedData.thumbnail ?? course.thumbnail;
+
+    course.pricing = allowedData.pricing ?? course.pricing;
 
     await course.save();
 
@@ -579,15 +746,6 @@ exports.addModule = async (req, res) => {
         message: "Cours introuvable.",
       });
     }
-
-    console.log("USER COMPLET :", req.user);
-    console.log("ID UTILISATEUR :", req.user?.id);
-    console.log("RÔLE :", req.user?.role);
-    console.log("ID INSTRUCTEUR DU COURS :", String(course.instructorId));
-    console.log(
-      "CORRESPONDANCE :",
-      String(course.instructorId) === String(req.user?.id),
-    );
 
     if (!canManageCourse(course, req.user)) {
       return res.status(403).json({
@@ -1062,21 +1220,23 @@ exports.addResource = async (req, res) => {
       });
     }
 
-    const payload = sanitizeResourcePayload(req.body);
+    const payload = normalizeResourcePayload(req.body);
 
     module.resources.push({
       ...payload,
-      order: payload.order || module.resources.length + 1,
+      order: payload.order ?? module.resources.length + 1,
     });
 
     await course.save();
 
-    const addedResource = module.resources[module.resources.length - 1];
+    const resource = module.resources[module.resources.length - 1];
 
     return res.status(201).json({
-      message: "Ressource ajoutée avec succès.",
-      resource: addedResource,
-      course,
+      message: "Ressource ajoutée.",
+
+      resource,
+
+      module,
     });
   } catch (error) {
     return sendError(res, error);
@@ -1123,7 +1283,25 @@ exports.updateResource = async (req, res) => {
 
     const resourceData = sanitizeResourcePayload(req.body);
 
-    Object.assign(resource, resourceData);
+    const payload = normalizeResourcePayload(req.body);
+
+    resource.title = payload.title;
+    resource.description = payload.description;
+    resource.type = payload.type;
+    resource.order = payload.order;
+    resource.durationSeconds = payload.durationSeconds;
+    resource.isPreview = payload.isPreview;
+    resource.articleContent = payload.articleContent;
+
+    resource.video = payload.video;
+    resource.file = payload.file;
+    resource.image = payload.image;
+
+    resource.externalUrl = payload.externalUrl;
+    resource.thumbnailUrl = payload.thumbnailUrl;
+
+    resource.isDownloadable = payload.isDownloadable;
+    resource.isActive = payload.isActive;
 
     await course.save();
 
@@ -1175,6 +1353,20 @@ exports.deleteResource = async (req, res) => {
       });
     }
 
+    const { deleteFile } = require("../services/upload.service");
+
+    if (resource.video?.publicId) {
+      await deleteFile(resource.video.publicId);
+    }
+
+    if (resource.file?.publicId) {
+      await deleteFile(resource.file.publicId);
+    }
+
+    if (resource.image?.publicId) {
+      await deleteFile(resource.image.publicId);
+    }
+
     resource.deleteOne();
 
     await course.save();
@@ -1209,10 +1401,9 @@ exports.publish = async (req, res) => {
       });
     }
 
-    if (!course.modules.length) {
+    if (!course.canPublish()) {
       return res.status(400).json({
-        message:
-          "Le cours doit contenir au moins un module avant sa publication.",
+        message: "Le cours est incomplet.",
       });
     }
 
@@ -1318,7 +1509,9 @@ exports.getStudentCourses = async (req, res) => {
     const courses = await Course.find({
       _id: { $in: courseIds },
       isActive: true,
-    }).lean();
+    })
+      .populate("categoryId", "name slug icon image parentCategory")
+      .lean();
 
     const courseMap = new Map(
       courses.map((course) => [course._id.toString(), course]),
@@ -1405,17 +1598,19 @@ exports.getStudentCourseById = async (req, res) => {
           "_id",
           "title",
           "description",
-          "category",
+          "categoryId",
           "level",
           "language",
           "tags",
           "instructorId",
+          "thumbnail",
           "thumbnailAssetId",
           "modules",
           "quizzes",
           "publishedAt",
         ].join(" "),
       )
+      .populate("categoryId", "name slug icon image parentCategory")
       .lean();
 
     if (!course) {
@@ -1451,11 +1646,15 @@ exports.getStudentCourseById = async (req, res) => {
             order: resource.order,
             isPreview: resource.isPreview,
 
-            videoAssetId:
-              resource.type === "VIDEO" ? resource.videoAssetId : null,
+            video: resource.video,
 
-            articleContent:
-              resource.type === "ARTICLE" ? resource.articleContent : null,
+            file: resource.file,
+
+            image: resource.image,
+
+            thumbnailUrl: resource.thumbnailUrl,
+
+            isDownloadable: resource.isDownloadable,
           })),
       }));
 
@@ -1488,11 +1687,17 @@ exports.getStudentCourseById = async (req, res) => {
         _id: course._id,
         title: course.title,
         description: course.description,
-        category: course.category,
+        category: course.categoryId,
+        categoryId: course.categoryId?._id || course.categoryId,
         level: course.level,
         language: course.language,
         tags: course.tags || [],
         instructorId: course.instructorId,
+        thumbnail: course.thumbnail || {
+          url: null,
+          publicId: null,
+          altText: course.title,
+        },
         thumbnailAssetId: course.thumbnailAssetId,
         publishedAt: course.publishedAt,
         modules,
@@ -1743,6 +1948,273 @@ exports.archive = async (req, res) => {
 
     return res.status(200).json({
       message: "Cours archivé avec succès.",
+      course,
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+/**
+ * GET /api/courses/management/instructor-dashboard
+ *
+ * Tableau de bord du formateur connecté.
+ */
+exports.instructorDashboard = async (req, res) => {
+  try {
+    const instructorId = req.user?.id;
+
+    if (!instructorId) {
+      return res.status(401).json({
+        message: "Utilisateur non authentifié.",
+      });
+    }
+
+    const courses = await Course.find({
+      instructorId,
+    })
+      .populate("categoryId", "name slug icon image")
+      .sort({
+        updatedAt: -1,
+      })
+      .lean();
+
+    const courseIds = courses.map((course) => course._id);
+
+    const enrollments = courseIds.length
+      ? await CourseEnrollment.find({
+          courseId: {
+            $in: courseIds,
+          },
+        })
+          .sort({
+            grantedAt: -1,
+          })
+          .lean()
+      : [];
+
+    const uniqueStudents = new Set(
+      enrollments.map((enrollment) => String(enrollment.studentId)),
+    );
+
+    const enrollmentCountByCourse = enrollments.reduce(
+      (accumulator, enrollment) => {
+        const courseId = String(enrollment.courseId);
+
+        accumulator[courseId] = (accumulator[courseId] || 0) + 1;
+
+        return accumulator;
+      },
+      {},
+    );
+
+    const activeEnrollments = enrollments.filter(
+      (enrollment) =>
+        enrollment.status === "ACTIVE" &&
+        (!enrollment.expiresAt || new Date(enrollment.expiresAt) > new Date()),
+    );
+
+    const totalModules = courses.reduce(
+      (total, course) =>
+        total + (Array.isArray(course.modules) ? course.modules.length : 0),
+      0,
+    );
+
+    const totalResources = courses.reduce(
+      (total, course) =>
+        total +
+        (Array.isArray(course.modules)
+          ? course.modules.reduce(
+              (moduleTotal, module) =>
+                moduleTotal +
+                (Array.isArray(module.resources) ? module.resources.length : 0),
+              0,
+            )
+          : 0),
+      0,
+    );
+
+    const normalizedCourses = courses.map((course) => ({
+      id: course._id,
+      title: course.title,
+      description: course.description,
+
+      status: course.status,
+      isActive: course.isActive,
+
+      category: course.categoryId?.name || "Sans catégorie",
+
+      thumbnail: course.thumbnail?.url || null,
+
+      level: course.level,
+      language: course.language,
+
+      modulesCount: course.modules?.length || 0,
+
+      resourcesCount:
+        course.modules?.reduce(
+          (total, module) => total + (module.resources?.length || 0),
+          0,
+        ) || 0,
+
+      quizzesCount: course.quizzes?.length || 0,
+
+      studentsCount: enrollmentCountByCourse[String(course._id)] || 0,
+
+      createdAt: course.createdAt,
+      updatedAt: course.updatedAt,
+      publishedAt: course.publishedAt,
+    }));
+
+    return res.status(200).json({
+      stats: {
+        totalCourses: courses.length,
+
+        publishedCourses: courses.filter(
+          (course) => course.status === "PUBLISHED",
+        ).length,
+
+        draftCourses: courses.filter((course) => course.status === "DRAFT")
+          .length,
+
+        archivedCourses: courses.filter(
+          (course) => course.status === "ARCHIVED",
+        ).length,
+
+        totalStudents: uniqueStudents.size,
+
+        totalEnrollments: enrollments.length,
+
+        activeEnrollments: activeEnrollments.length,
+
+        totalModules,
+
+        totalResources,
+      },
+
+      recentCourses: normalizedCourses.slice(0, 5),
+
+      courses: normalizedCourses,
+
+      recentEnrollments: enrollments.slice(0, 5),
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+exports.adminSummary = async (req, res) => {
+  try {
+    const [totalCourses, published, drafts, archived, recentCourses] =
+      await Promise.all([
+        Course.countDocuments(),
+
+        Course.countDocuments({
+          status: "PUBLISHED",
+        }),
+
+        Course.countDocuments({
+          status: "DRAFT",
+        }),
+
+        Course.countDocuments({
+          status: "ARCHIVED",
+        }),
+
+        Course.find()
+          .sort({
+            createdAt: -1,
+          })
+          .limit(5)
+          .select("title status thumbnail instructor createdAt")
+          .lean(),
+      ]);
+
+    return res.json({
+      stats: {
+        totalCourses,
+        publishedCourses: published,
+        draftCourses: drafts,
+        archivedCourses: archived,
+      },
+
+      recentCourses,
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+exports.adminList = async (req, res) => {
+  try {
+    const page = Number(req.query.page || 1);
+
+    const limit = Number(req.query.limit || 20);
+
+    const filter = {};
+
+    if (req.query.status) {
+      filter.status = req.query.status;
+    }
+
+    if (req.query.search) {
+      filter.title = {
+        $regex: req.query.search,
+        $options: "i",
+      };
+    }
+
+    const total = await Course.countDocuments(filter);
+
+    const courses = await Course.find(filter)
+      .populate("categoryId", "name")
+      .sort({
+        createdAt: -1,
+      })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean();
+
+    return res.json({
+      courses,
+
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+exports.adminUpdateStatus = async (req, res) => {
+  try {
+    const course = await Course.findById(req.params.id);
+
+    if (!course) {
+      return res.status(404).json({
+        message: "Cours introuvable.",
+      });
+    }
+
+    const { status, isActive } = req.body;
+
+    if (status) {
+      course.status = status;
+    }
+
+    if (typeof isActive === "boolean") {
+      course.isActive = isActive;
+    }
+
+    await course.save();
+
+    return res.json({
+      message: "Cours mis à jour.",
+
       course,
     });
   } catch (error) {

@@ -18,3 +18,5 @@
         condition: service_healthy
       subscription-service:
         condition: service_started
+      progress-service:
+        condition: service_started

@@ -5,6 +5,8 @@ const { Schema } = mongoose;
 /**
  * Sous-schéma des fonctionnalités d'un plan d'accès.
  */
+
+
 const planFeaturesSchema = new Schema(
   {
     courseContent: {
@@ -70,6 +72,16 @@ const accessPlanSchema = new Schema(
       required: true,
       min: 0,
     },
+    currency: {
+      type: String,
+      default: "CAD",
+      uppercase: true,
+    },
+
+    displayOrder: {
+      type: Number,
+      default: 1,
+    },
 
     features: {
       type: planFeaturesSchema,
@@ -92,59 +104,100 @@ const accessPlanSchema = new Schema(
  * Aucun contenu n'est destiné à être téléchargé directement.
  * Pour les vidéos, on conserve un identifiant d'asset et non une URL publique.
  */
-const resourceSchema = new Schema(
+const resourceSchema = new mongoose.Schema(
   {
+    _id: {
+      type: mongoose.Schema.Types.ObjectId,
+      auto: true,
+    },
+
     title: {
       type: String,
       required: true,
       trim: true,
-      minlength: 2,
-      maxlength: 255,
     },
 
     description: {
       type: String,
-      trim: true,
-      default: null,
+      default: "",
     },
 
     type: {
       type: String,
-      enum: ["VIDEO", "ARTICLE", "QUIZ", "EXERCISE"],
+      enum: [
+        "VIDEO",
+        "ARTICLE",
+        "PDF",
+        "DOCUMENT",
+        "IMAGE",
+        "ZIP",
+        "AUDIO",
+        "QUIZ",
+        "EXERCISE",
+      ],
       required: true,
-    },
-
-    /**
-     * Identifiant interne de la vidéo.
-     * Le backend pourra générer une URL temporaire de streaming.
-     */
-    videoAssetId: {
-      type: String,
-      trim: true,
-      default: null,
-    },
-
-    /**
-     * Contenu texte affiché directement dans la plateforme.
-     */
-    articleContent: {
-      type: String,
-      default: null,
-    },
-
-    durationMinutes: {
-      type: Number,
-      min: 0,
-      default: 0,
     },
 
     order: {
       type: Number,
-      min: 1,
       default: 1,
     },
 
+    durationSeconds: {
+      type: Number,
+      default: 0,
+    },
+
     isPreview: {
+      type: Boolean,
+      default: false,
+    },
+
+    articleContent: {
+      type: String,
+      default: "",
+    },
+
+    video: {
+      url: String,
+      publicId: String,
+      duration: Number,
+      format: String,
+      bytes: Number,
+      width: Number,
+      height: Number,
+      thumbnailUrl: String,
+    },
+
+    file: {
+      url: String,
+      publicId: String,
+      originalName: String,
+      mimeType: String,
+      bytes: Number,
+      format: String,
+      downloadUrl: String,
+    },
+
+    image: {
+      url: String,
+      publicId: String,
+      width: Number,
+      height: Number,
+      format: String,
+      bytes: Number,
+    },
+
+    externalUrl: {
+      type: String,
+      default: "",
+    },
+    thumbnailUrl: {
+      type: String,
+      default: "",
+    },
+
+    isDownloadable: {
       type: Boolean,
       default: false,
     },
@@ -155,7 +208,7 @@ const resourceSchema = new Schema(
     },
   },
   {
-    timestamps: true,
+    _id: false,
   },
 );
 
@@ -405,11 +458,11 @@ const courseSchema = new Schema(
       default: null,
     },
 
-    category: {
-      type: String,
-      required: true,
-      trim: true,
-      maxlength: 100,
+    categoryId: {
+      type: Schema.Types.ObjectId,
+      ref: "CourseCategory",
+      required: [true, "La catégorie du cours est obligatoire."],
+      index: true,
     },
 
     level: {
@@ -446,7 +499,77 @@ const courseSchema = new Schema(
       required: true,
       trim: true,
     },
+    instructor: {
+      firstName: {
+        type: String,
+        trim: true,
+        default: null,
+      },
 
+      lastName: {
+        type: String,
+        trim: true,
+        default: null,
+      },
+
+      fullName: {
+        type: String,
+        trim: true,
+        default: null,
+      },
+    },
+
+    /**
+     * Image de couverture affichée dans le catalogue et la page du cours.
+     * `url` permet l'affichage direct côté Web et mobile.
+     * `publicId` permet de remplacer ou supprimer l'image chez le fournisseur
+     * de stockage (par exemple Cloudinary).
+     */
+    thumbnail: {
+      url: {
+        type: String,
+        trim: true,
+        default: null,
+        maxlength: 2000,
+      },
+      width: {
+        type: Number,
+        default: null,
+      },
+
+      height: {
+        type: Number,
+        default: null,
+      },
+      format: {
+        type: String,
+        default: null,
+      },
+
+      bytes: {
+        type: Number,
+        default: null,
+      },
+
+      publicId: {
+        type: String,
+        trim: true,
+        default: null,
+        maxlength: 500,
+      },
+
+      altText: {
+        type: String,
+        trim: true,
+        default: "",
+        maxlength: 255,
+      },
+    },
+
+    /**
+     * Ancien identifiant conservé temporairement pour compatibilité.
+     * Il pourra être supprimé après migration des anciens cours.
+     */
     thumbnailAssetId: {
       type: String,
       trim: true,
@@ -561,27 +684,38 @@ const courseSchema = new Schema(
  * Validation métier des ressources.
  */
 resourceSchema.pre("validate", function validateResource(next) {
-  if (this.type === "VIDEO" && !this.videoAssetId) {
-    return next(
-      new Error("Une ressource VIDEO doit contenir un champ videoAssetId."),
-    );
-  }
+  try {
+    if (this.type === "VIDEO" && (!this.video?.url || !this.video?.publicId)) {
+      return next(
+        new Error("Une ressource VIDEO doit contenir une vidéo valide."),
+      );
+    }
 
-  if (this.type === "ARTICLE" && !this.articleContent) {
-    return next(
-      new Error("Une ressource ARTICLE doit contenir un champ articleContent."),
-    );
-  }
+    if (
+      ["PDF", "DOCUMENT", "ZIP", "AUDIO"].includes(this.type) &&
+      (!this.file?.url || !this.file?.publicId)
+    ) {
+      return next(
+        new Error(
+          `Une ressource ${this.type} doit contenir un fichier valide.`,
+        ),
+      );
+    }
 
-  if (this.type !== "VIDEO") {
-    this.videoAssetId = null;
-  }
+    if (this.type === "IMAGE" && (!this.image?.url || !this.image?.publicId)) {
+      return next(
+        new Error("Une ressource IMAGE doit contenir une image valide."),
+      );
+    }
 
-  if (this.type !== "ARTICLE") {
-    this.articleContent = null;
-  }
+    if (this.type === "ARTICLE" && !this.articleContent) {
+      return next(new Error("Une ressource ARTICLE doit contenir un contenu."));
+    }
 
-  next();
+    next();
+  } catch (err) {
+    next(err);
+  }
 });
 
 /**
@@ -640,6 +774,10 @@ courseSchema.pre("validate", function validateCourse(next) {
         accessPlan.features.personalizedFollowUp = true;
         accessPlan.features.assignmentCorrection = true;
       }
+    }
+
+    if (this.thumbnail?.url && !this.thumbnail.altText) {
+      this.thumbnail.altText = this.title;
     }
 
     const sponsorship = this.sponsorship || {};
@@ -784,7 +922,6 @@ courseSchema.methods.getOrderedContent = function getOrderedContent() {
 courseSchema.index({
   title: "text",
   description: "text",
-  category: "text",
   tags: "text",
 });
 
@@ -799,7 +936,7 @@ courseSchema.index({
 });
 
 courseSchema.index({
-  category: 1,
+  categoryId: 1,
   level: 1,
   language: 1,
 });
@@ -813,6 +950,85 @@ courseSchema.index({
   "sponsorship.isSponsored": -1,
   "sponsorship.priorityLevel": -1,
   "sponsorship.endsAt": 1,
+});
+
+resourceSchema.methods.isVideo = function () {
+  return this.type === "VIDEO";
+};
+
+resourceSchema.methods.isDocument = function () {
+  return ["PDF", "DOCUMENT", "ZIP"].includes(this.type);
+};
+
+resourceSchema.methods.isImage = function () {
+  return this.type === "IMAGE";
+};
+
+resourceSchema.methods.isArticle = function () {
+  return this.type === "ARTICLE";
+};
+
+courseSchema.methods.findResource = function (resourceId) {
+  for (const module of this.modules) {
+    const resource = module.resources.id(resourceId);
+
+    if (resource) {
+      return {
+        module,
+        resource,
+      };
+    }
+  }
+
+  return null;
+};
+
+courseSchema.methods.findModule = function (moduleId) {
+  return this.modules.id(moduleId);
+};
+
+courseSchema.methods.findQuiz = function (quizId) {
+  return this.quizzes.id(quizId);
+};
+
+courseSchema.methods.canPublish = function () {
+  if (!this.title) return false;
+
+  if (!this.description) return false;
+
+  if (!this.categoryId) return false;
+
+  if (!this.thumbnail?.url) return false;
+
+  if (this.modules.length === 0) return false;
+
+  return true;
+};
+
+courseSchema.methods.totalDuration = function () {
+  let duration = 0;
+
+  this.modules.forEach((module) => {
+    module.resources.forEach((resource) => {
+      duration += resource.durationSeconds || 0;
+    });
+  });
+
+  return duration;
+};
+
+courseSchema.virtual("resourceCount").get(function () {
+  return this.modules.reduce((total, module) => {
+    return total + module.resources.length;
+  }, 0);
+});
+
+courseSchema.virtual("moduleCount").get(function () {
+  return this.modules.length;
+});
+
+courseSchema.virtual("quizCount").get(function () {
+  return this.quizzes.length;
 });
 
 module.exports = mongoose.model("Course", courseSchema);

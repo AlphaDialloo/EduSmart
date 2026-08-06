@@ -7,6 +7,7 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <StatusBar style="auto" />
+
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="(auth)" />
@@ -14,6 +15,7 @@ export default function RootLayout() {
         <Stack.Screen name="(instructor)" />
         <Stack.Screen name="courses/[id]" />
         <Stack.Screen name="courses/player/[id]" />
+        <Stack.Screen name="courses/manage/[id]" />
       </Stack>
     </AuthProvider>
   );

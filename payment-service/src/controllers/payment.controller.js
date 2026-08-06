@@ -2,6 +2,7 @@ const repo = require("../repositories/payment.repository");
 const subscriptions = require("../services/subscription.service");
 const courses = require("../services/course.service");
 const provider = require("../services/provider.service");
+const progress = require("../services/progress.service");
 
 const {
   validateCreatePayment,
@@ -93,6 +94,32 @@ async function details(type, referenceId, userId, accessPlanId) {
   error.statusCode = 400;
   throw error;
 }
+
+/**
+ * GET /api/payments/instructor/analytics
+ */
+exports.instructorAnalytics = async (req, res, next) => {
+  try {
+    const instructorId = req.user?.id;
+
+    if (!instructorId) {
+      return res.status(401).json({
+        message: "Utilisateur non authentifié.",
+      });
+    }
+
+    const months = Math.min(
+      Math.max(Number.parseInt(req.query.months, 10) || 6, 1),
+      24,
+    );
+
+    const analytics = await repo.getInstructorAnalytics(instructorId, months);
+
+    return res.status(200).json(analytics);
+  } catch (error) {
+    next(error);
+  }
+};
 
 /**
  * Créer un paiement.
@@ -284,9 +311,14 @@ exports.testSuccess = async (req, res, next) => {
         accessPlanId,
       });
 
+      await progress.createEnrollment({
+        studentId: payment.userId,
+        courseId: payment.referenceId,
+        courseTitle: payment.metadata?.courseTitle || "Cours EduSmart",
+      });
+
       await repo.markCourseAccessGranted(payment.id);
     }
-
     return res.json({
       message: "Paiement de test confirmé.",
       payment,
@@ -296,6 +328,53 @@ exports.testSuccess = async (req, res, next) => {
   }
 };
 
+exports.internalEnroll = async (req, res) => {
+  try {
+    const { studentId, courseId, courseTitle } = req.body;
+
+    if (!studentId || !courseId || !courseTitle) {
+      return res.status(400).json({
+        message: "studentId, courseId et courseTitle sont obligatoires.",
+      });
+    }
+
+    const result = await pool.query(
+      `
+        INSERT INTO progress_service.enrollments (
+          user_id,
+          course_id,
+          course_title,
+          status,
+          progress_percentage,
+          started_at,
+          updated_at
+        )
+        VALUES (
+          $1,
+          $2,
+          $3,
+          'IN_PROGRESS',
+          0,
+          CURRENT_TIMESTAMP,
+          CURRENT_TIMESTAMP
+        )
+        ON CONFLICT (user_id, course_id)
+        DO UPDATE SET
+          course_title = EXCLUDED.course_title,
+          updated_at = CURRENT_TIMESTAMP
+        RETURNING *
+      `,
+      [studentId, String(courseId), String(courseTitle)],
+    );
+
+    return res.status(201).json({
+      message: "Inscription interne créée.",
+      enrollment: result.rows[0],
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
 /**
  * Simuler l'échec d'un paiement TEST.
  */
@@ -445,6 +524,21 @@ exports.refund = async (req, res, next) => {
       message: "Remboursement traité.",
       ...result,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.adminSummary = async (req, res, next) => {
+  try {
+    const months = Math.min(
+      Math.max(parseInt(req.query.months || "6", 10), 1),
+      24,
+    );
+
+    const analytics = await repo.getGlobalAnalytics(months);
+
+    return res.json(analytics);
   } catch (error) {
     next(error);
   }
