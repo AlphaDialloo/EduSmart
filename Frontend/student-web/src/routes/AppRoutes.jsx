@@ -29,6 +29,7 @@ import AdminDashboardPage from "../pages/admin/AdminDashboardPage";
 import AdminUsersPage from "../pages/admin/AdminUsersPage";
 import AdminCoursesPage from "../pages/admin/AdminCoursesPage";
 import AdminPaymentsPage from "../pages/admin/AdminPaymentsPage";
+import AdminCategoriesPage from "../pages/admin/AdminCategoriesPage";
 
 import ProtectedRoute from "./ProtectedRoute";
 
@@ -53,10 +54,7 @@ function AppRoutes() {
     <Routes>
       {/* Routes publiques */}
       <Route element={<PublicLayout />}>
-        <Route
-          path="/"
-          element={<HomePage />}
-        />
+        <Route path="/" element={<HomePage />} />
 
         <Route
           path="/courses"
@@ -230,6 +228,11 @@ function AppRoutes() {
         <Route
           path="courses"
           element={<AdminCoursesPage />}
+        />
+
+        <Route
+          path="categories"
+          element={<AdminCategoriesPage />}
         />
 
         <Route

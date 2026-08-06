@@ -2,6 +2,7 @@ import {
   BookOpen,
   CreditCard,
   LayoutDashboard,
+  FolderTree,
   LogOut,
   Menu,
   UsersRound,
@@ -28,6 +29,11 @@ const items = [
     to: "/admin/courses",
     label: "Cours",
     icon: BookOpen,
+  },
+  {
+    label: "Catégories",
+    to: "/admin/categories",
+    icon: FolderTree,
   },
   {
     to: "/admin/payments",
@@ -57,22 +63,22 @@ function SidebarContent({ onNavigate }) {
 
           return (
             <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              onClick={onNavigate}
-              style={({ isActive }) => ({
-                color: isActive ? "#ffffff" : "#cbd5e1",
-                backgroundColor: isActive
-                  ? "#4f46e5"
-                  : "transparent",
-              })}
-              className="flex items-center gap-3 rounded-2xl px-4 py-3.5 text-sm font-black transition hover:bg-slate-800"
-            >
-              <Icon size={20} />
+            key={item.to}
+            to={item.to}
+            end={item.end}
+            onClick={onNavigate}
+            style={({ isActive }) => ({
+              color: isActive ? "#ffffff" : "#cbd5e1",
+              backgroundColor: isActive
+                ? "#4f46e5"
+                : "transparent",
+            })}
+            className="flex items-center gap-3 rounded-2xl px-4 py-3.5 text-sm font-black transition hover:bg-slate-800"
+          >
+            <Icon size={20} />
 
-              <span>{item.label}</span>
-            </NavLink>
+            <span>{item.label}</span>
+          </NavLink>
           );
         })}
       </nav>

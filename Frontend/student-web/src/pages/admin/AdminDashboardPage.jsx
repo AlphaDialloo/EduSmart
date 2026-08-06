@@ -1,24 +1,28 @@
 import {
   BookOpen,
   CircleDollarSign,
+  FolderPlus,
   GraduationCap,
   LoaderCircle,
-  ReceiptText,
-  ShieldCheck,
-  TrendingUp,
+  Plus,
   UsersRound,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router";
 
 import { useAuth } from "../../contexts/AuthContext";
 import { getAdminDashboard } from "../../services/admin.service";
 
 function formatMoney(value, currency = "CAD") {
-  return new Intl.NumberFormat("fr-CA", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 2,
-  }).format(Number(value || 0));
+  try {
+    return new Intl.NumberFormat("fr-CA", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 2,
+    }).format(Number(value || 0));
+  } catch {
+    return `${Number(value || 0).toFixed(2)} ${currency}`;
+  }
 }
 
 function formatDate(value) {
@@ -33,59 +37,30 @@ function formatDate(value) {
   }).format(new Date(value));
 }
 
-function RevenueChart({ data = [] }) {
-  const maximum = Math.max(
-    ...data.map((item) =>
-      Number(item.revenue ?? item.amount ?? 0),
-    ),
-    1,
-  );
-
-  if (!data.length) {
-    return (
-      <div className="mt-5 flex h-44 items-center justify-center rounded-2xl bg-slate-50 text-sm font-bold text-slate-500">
-        Aucune donnée disponible.
-      </div>
-    );
-  }
-
+function StatCard({ icon: Icon, label, value, description }) {
   return (
-    <div className="mt-5 flex h-52 items-end gap-2">
-      {data.map((item, index) => {
-        const amount = Number(
-          item.revenue ?? item.amount ?? 0,
-        );
+    <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <span className="flex size-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+          <Icon size={22} />
+        </span>
 
-        const height = Math.max(
-          (amount / maximum) * 100,
-          amount > 0 ? 7 : 2,
-        );
+        <span className="text-right text-3xl font-black text-slate-950">
+          {value}
+        </span>
+      </div>
 
-        return (
-          <div
-            key={item.month || item.label || index}
-            className="flex min-w-0 flex-1 flex-col items-center"
-          >
-            <div className="flex h-36 w-full items-end rounded-xl bg-slate-100 p-1">
-              <div
-                className="w-full rounded-lg bg-indigo-600 transition hover:bg-indigo-700"
-                style={{ height: `${height}%` }}
-                title={formatMoney(amount)}
-              />
-            </div>
+      <p className="mt-4 font-black text-slate-800">{label}</p>
 
-            <p className="mt-2 truncate text-[11px] font-bold capitalize text-slate-500">
-              {item.label || item.month}
-            </p>
-          </div>
-        );
-      })}
-    </div>
+      {description ? (
+        <p className="mt-1 text-sm text-slate-500">{description}</p>
+      ) : null}
+    </article>
   );
 }
 
 export default function AdminDashboardPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
 
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -94,7 +69,7 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     let active = true;
 
-    async function load() {
+    async function loadDashboard() {
       try {
         setLoading(true);
         setError("");
@@ -109,7 +84,7 @@ export default function AdminDashboardPage() {
           setError(
             requestError.response?.data?.message ||
               requestError.message ||
-              "Impossible de charger le tableau de bord.",
+              "Impossible de charger le tableau de bord administrateur.",
           );
         }
       } finally {
@@ -120,7 +95,9 @@ export default function AdminDashboardPage() {
     }
 
     if (token) {
-      load();
+      loadDashboard();
+    } else {
+      setLoading(false);
     }
 
     return () => {
@@ -129,253 +106,212 @@ export default function AdminDashboardPage() {
   }, [token]);
 
   const stats = dashboard?.stats || {};
+  const currency = dashboard?.recentPayments?.[0]?.currency || "CAD";
 
-  const cards = useMemo(
+  const statCards = useMemo(
     () => [
       {
         label: "Utilisateurs",
         value: stats.totalUsers || 0,
+        description: `${stats.students || 0} étudiant(s) · ${
+          stats.instructors || 0
+        } formateur(s)`,
         icon: UsersRound,
-      },
-      {
-        label: "Étudiants",
-        value: stats.students || 0,
-        icon: GraduationCap,
-      },
-      {
-        label: "Formateurs",
-        value: stats.instructors || 0,
-        icon: ShieldCheck,
       },
       {
         label: "Cours",
         value: stats.totalCourses || 0,
+        description: `${stats.publishedCourses || 0} publié(s) · ${
+          stats.draftCourses || 0
+        } brouillon(s)`,
         icon: BookOpen,
       },
       {
-        label: "Cours publiés",
-        value: stats.publishedCourses || 0,
-        icon: TrendingUp,
-      },
-      {
-        label: "Ventes",
+        label: "Ventes réussies",
         value: stats.totalSales || 0,
-        icon: ReceiptText,
+        description: "Paiements confirmés",
+        icon: GraduationCap,
       },
       {
         label: "Revenu total",
-        value: formatMoney(stats.totalRevenue),
-        icon: CircleDollarSign,
-      },
-      {
-        label: "Revenu du mois",
-        value: formatMoney(stats.monthlyRevenue),
+        value: formatMoney(stats.totalRevenue, currency),
+        description: `${formatMoney(
+          stats.monthlyRevenue,
+          currency,
+        )} ce mois`,
         icon: CircleDollarSign,
       },
     ],
-    [stats],
+    [stats, currency],
   );
 
   if (loading) {
     return (
-      <main className="flex min-h-[70vh] items-center justify-center">
-        <LoaderCircle
-          size={42}
-          className="animate-spin text-indigo-600"
-        />
+      <main className="flex min-h-[70vh] items-center justify-center bg-[#f7f8fc]">
+        <div className="text-center">
+          <LoaderCircle
+            size={42}
+            className="mx-auto animate-spin text-indigo-600"
+          />
+          <p className="mt-4 font-bold text-slate-500">
+            Chargement du dashboard administrateur...
+          </p>
+        </div>
       </main>
     );
   }
 
   return (
-    <main className="px-5 py-8 lg:px-8">
-      <div>
-        <p className="text-sm font-black uppercase tracking-[0.2em] text-indigo-600">
-          Administration
-        </p>
+    <main className="min-h-screen bg-[#f7f8fc]">
+      <section className="border-b border-slate-200 bg-white">
+        <div className="flex flex-col justify-between gap-6 px-5 py-8 lg:flex-row lg:items-end lg:px-8">
+          <div>
+            <p className="text-sm font-black uppercase tracking-[0.2em] text-indigo-600">
+              Administration
+            </p>
 
-        <h1 className="mt-2 text-4xl font-black text-slate-950">
-          Tableau de bord
-        </h1>
+            <h1 className="mt-3 text-4xl font-black text-slate-950">
+              Bonjour {user?.firstName || "Administrateur"}
+            </h1>
 
-        <p className="mt-2 text-slate-500">
-          Vue générale de la plateforme EduSmart.
-        </p>
-      </div>
-
-      {error && (
-        <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 font-bold text-red-700">
-          {error}
-        </div>
-      )}
-
-      <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {cards.map((card) => {
-          const Icon = card.icon;
-
-          return (
-            <article
-              key={card.label}
-              className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
-            >
-              <div className="flex items-center justify-between gap-4">
-                <span className="flex size-11 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
-                  <Icon size={21} />
-                </span>
-
-                <span className="text-right text-2xl font-black text-slate-950">
-                  {card.value}
-                </span>
-              </div>
-
-              <p className="mt-4 text-sm font-bold text-slate-500">
-                {card.label}
-              </p>
-            </article>
-          );
-        })}
-      </section>
-
-      <section className="mt-8 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-2xl font-black text-slate-950">
-            Revenus mensuels
-          </h2>
-
-          <p className="mt-1 text-sm text-slate-500">
-            Évolution sur les six derniers mois.
-          </p>
-
-          <RevenueChart
-            data={dashboard?.monthlyRevenue || []}
-          />
-        </article>
-
-        <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-2xl font-black text-slate-950">
-            Derniers paiements
-          </h2>
-
-          <div className="mt-4 space-y-2">
-            {!dashboard?.recentPayments?.length ? (
-              <div className="rounded-2xl bg-slate-50 p-5 text-center text-sm text-slate-500">
-                Aucun paiement récent.
-              </div>
-            ) : (
-              dashboard.recentPayments
-                .slice(0, 4)
-                .map((payment) => (
-                  <div
-                    key={payment.id || payment._id}
-                    className="border-b border-slate-100 py-3 last:border-0"
-                  >
-                    <p className="line-clamp-1 text-sm font-black text-slate-900">
-                      {payment.courseTitle ||
-                        payment.paymentType ||
-                        "Paiement"}
-                    </p>
-
-                    <div className="mt-1 flex items-center justify-between gap-3">
-                      <span className="text-xs font-bold text-slate-500">
-                        {formatDate(
-                          payment.paidAt ||
-                            payment.createdAt,
-                        )}
-                      </span>
-
-                      <span className="font-black text-emerald-600">
-                        {formatMoney(
-                          payment.amount,
-                          payment.currency || "CAD",
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                ))
-            )}
+            <p className="mt-3 text-slate-500">
+              Gérez les utilisateurs, les cours, les catégories et les
+              paiements depuis un seul espace.
+            </p>
           </div>
-        </article>
+
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Link
+              to="/admin/categories"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-indigo-200 bg-indigo-50 px-5 py-3.5 font-black text-indigo-700 transition hover:border-indigo-300 hover:bg-indigo-100"
+            >
+              <FolderPlus size={20} />
+              Créer une catégorie
+            </Link>
+
+            <Link
+              to="/instructor/courses/new"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3.5 font-black text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700"
+            >
+              <Plus size={20} />
+              Créer un cours
+            </Link>
+          </div>
+        </div>
       </section>
 
-      <section className="mt-8 grid gap-6 xl:grid-cols-2">
-        <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-2xl font-black text-slate-950">
-            Nouveaux utilisateurs
-          </h2>
+      <div className="px-5 py-8 lg:px-8">
+        {error ? (
+          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-5 font-bold text-red-700">
+            {error}
+          </div>
+        ) : null}
 
-          <div className="mt-4 space-y-2">
-            {!dashboard?.recentUsers?.length ? (
-              <p className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">
-                Aucun utilisateur récent.
-              </p>
-            ) : (
-              dashboard.recentUsers
-                .slice(0, 5)
-                .map((user) => (
+        <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+          {statCards.map((card) => (
+            <StatCard key={card.label} {...card} />
+          ))}
+        </section>
+
+        <section className="mt-8 grid gap-6 xl:grid-cols-3">
+          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm xl:col-span-2">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-black text-slate-950">
+                  Utilisateurs récents
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Dernières inscriptions sur EduSmart.
+                </p>
+              </div>
+
+              <Link
+                to="/admin/users"
+                className="text-sm font-black text-indigo-600"
+              >
+                Voir tous
+              </Link>
+            </div>
+
+            <div className="mt-5 divide-y divide-slate-100">
+              {!dashboard?.recentUsers?.length ? (
+                <div className="rounded-2xl bg-slate-50 p-6 text-center text-slate-500">
+                  Aucun utilisateur récent.
+                </div>
+              ) : (
+                dashboard.recentUsers.slice(0, 5).map((item) => (
                   <div
-                    key={user.id || user._id}
-                    className="flex items-center justify-between gap-4 border-b border-slate-100 py-3 last:border-0"
+                    key={item.id || item._id}
+                    className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <div className="min-w-0">
-                      <p className="truncate font-black text-slate-900">
-                        {user.fullName ||
-                          [user.firstName, user.lastName]
+                    <div>
+                      <p className="font-black text-slate-900">
+                        {item.fullName ||
+                          [item.firstName, item.lastName]
                             .filter(Boolean)
                             .join(" ") ||
-                          user.email}
+                          "Utilisateur"}
                       </p>
-
-                      <p className="mt-1 truncate text-xs text-slate-500">
-                        {user.email}
-                      </p>
-                    </div>
-
-                    <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-black text-indigo-600">
-                      {user.role}
-                    </span>
-                  </div>
-                ))
-            )}
-          </div>
-        </article>
-
-        <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-2xl font-black text-slate-950">
-            Cours récents
-          </h2>
-
-          <div className="mt-4 space-y-2">
-            {!dashboard?.recentCourses?.length ? (
-              <p className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">
-                Aucun cours récent.
-              </p>
-            ) : (
-              dashboard.recentCourses
-                .slice(0, 5)
-                .map((course) => (
-                  <div
-                    key={course.id || course._id}
-                    className="flex items-center justify-between gap-4 border-b border-slate-100 py-3 last:border-0"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate font-black text-slate-900">
-                        {course.title}
-                      </p>
-
-                      <p className="mt-1 text-xs text-slate-500">
-                        {formatDate(course.createdAt)}
+                      <p className="mt-1 text-sm text-slate-500">
+                        {item.email}
                       </p>
                     </div>
 
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700">
-                      {course.status}
-                    </span>
+                    <div className="text-left sm:text-right">
+                      <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-black text-indigo-700">
+                        {item.role}
+                      </span>
+                      <p className="mt-2 text-xs font-bold text-slate-400">
+                        {formatDate(item.createdAt || item.created_at)}
+                      </p>
+                    </div>
                   </div>
                 ))
-            )}
-          </div>
-        </article>
-      </section>
+              )}
+            </div>
+          </article>
+
+          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-2xl font-black text-slate-950">
+              Actions rapides
+            </h2>
+
+            <div className="mt-5 space-y-3">
+              <Link
+                to="/admin/categories"
+                className="flex items-center gap-3 rounded-2xl bg-indigo-50 p-4 font-black text-indigo-700 transition hover:bg-indigo-100"
+              >
+                <FolderPlus size={21} />
+                Gérer les catégories
+              </Link>
+
+              <Link
+                to="/admin/users"
+                className="flex items-center gap-3 rounded-2xl bg-slate-50 p-4 font-black text-slate-700 transition hover:bg-slate-100"
+              >
+                <UsersRound size={21} />
+                Gérer les utilisateurs
+              </Link>
+
+              <Link
+                to="/admin/courses"
+                className="flex items-center gap-3 rounded-2xl bg-slate-50 p-4 font-black text-slate-700 transition hover:bg-slate-100"
+              >
+                <BookOpen size={21} />
+                Gérer les cours
+              </Link>
+
+              <Link
+                to="/admin/payments"
+                className="flex items-center gap-3 rounded-2xl bg-slate-50 p-4 font-black text-slate-700 transition hover:bg-slate-100"
+              >
+                <CircleDollarSign size={21} />
+                Consulter les paiements
+              </Link>
+            </div>
+          </article>
+        </section>
+      </div>
     </main>
   );
 }
