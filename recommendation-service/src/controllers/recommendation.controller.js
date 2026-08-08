@@ -56,7 +56,7 @@ exports.generate = async (req, res) => {
   const client = await pool.connect();
 
   try {
-    const requestedLimit = Number(req.body.limit);
+    const requestedLimit = Number(req.body?.limit);
     const limit =
       Number.isInteger(requestedLimit) &&
       requestedLimit >= 1 &&
@@ -74,7 +74,8 @@ exports.generate = async (req, res) => {
           headers: authHeaders(req),
         }),
 
-        axios.get(`${process.env.COURSE_SERVICE_URL}/courses`, {
+        // course-service monte ses routes sous /api/courses.
+        axios.get(`${process.env.COURSE_SERVICE_URL}/api/courses`, {
           headers: authHeaders(req),
         }),
       ]);
@@ -94,7 +95,6 @@ exports.generate = async (req, res) => {
       : coursesResponse.data?.courses || [];
 
     let level = profile.currentLevel || profile.current_level || "BEGINNER";
-
     let reason = "Recommandation basée sur le profil de l'étudiant.";
 
     const latestAttempt = attempts[0];
@@ -214,7 +214,6 @@ exports.feedback = async (req, res) => {
   try {
     const { rating, comment = null } = req.body;
     const recommendationId = req.params.id;
-
     const normalizedRating = Number(rating);
 
     if (
@@ -271,10 +270,10 @@ exports.feedback = async (req, res) => {
   }
 };
 
-
 /**
  * GET /api/recommendations/dashboard
- * Régénère les recommandations à partir du profil, du dernier quiz et des cours publiés.
+ * Régénère les recommandations à partir du profil, du dernier quiz
+ * et des cours publiés.
  */
 exports.dashboard = async (req, res) => {
   req.body = { ...(req.body || {}), limit: 6 };
