@@ -18,28 +18,33 @@ const courseEnrollmentSchema = new Schema(
       index: true,
     },
 
+    // Obligatoire seulement pour un cours payant.
+    // Un cours gratuit n'a pas de paymentId.
     paymentId: {
       type: String,
-      required: true,
       trim: true,
       unique: true,
+      sparse: true,
+      default: undefined,
     },
 
+    // Null pour un cours gratuit.
     accessPlanId: {
       type: Schema.Types.ObjectId,
-      required: true,
+      default: null,
     },
 
     planType: {
       type: String,
-      enum: ["STANDARD", "PREMIUM"],
+      enum: ["FREE", "STANDARD", "PREMIUM"],
       required: true,
     },
 
+    // Null signifie accès sans durée limitée.
     durationMonths: {
       type: Number,
-      enum: [1, 3, 6, 12],
-      required: true,
+      enum: [1, 3, 6, 12, null],
+      default: null,
     },
 
     features: {
@@ -87,9 +92,10 @@ const courseEnrollmentSchema = new Schema(
       default: Date.now,
     },
 
+    // Null = accès sans expiration, notamment pour les cours gratuits.
     expiresAt: {
       type: Date,
-      required: true,
+      default: null,
       index: true,
     },
 
@@ -104,6 +110,7 @@ const courseEnrollmentSchema = new Schema(
   },
 );
 
+// Un étudiant ne peut avoir qu'une seule inscription par cours.
 courseEnrollmentSchema.index(
   {
     courseId: 1,
@@ -114,4 +121,7 @@ courseEnrollmentSchema.index(
   },
 );
 
-module.exports = mongoose.model("CourseEnrollment", courseEnrollmentSchema);
+module.exports = mongoose.model(
+  "CourseEnrollment",
+  courseEnrollmentSchema,
+);

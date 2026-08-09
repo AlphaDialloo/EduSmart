@@ -192,3 +192,38 @@ export async function getCourseById(courseId) {
 }
 
 export default courseApi;
+function authConfig(token) {
+  return {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  };
+}
+
+export async function getStudentCourseById(token, courseId) {
+  const response = await courseApi.get(
+    `/student/enrollments/${courseId}`,
+    authConfig(token),
+  );
+
+  return response.data;
+}
+
+export async function getStudentQuiz(token, courseId, quizId) {
+  const response = await courseApi.get(
+    `/${courseId}/quizzes/${quizId}/student`,
+    authConfig(token),
+  );
+
+  return response.data;
+}
+
+export async function submitCourseQuiz(token, courseId, quizId, answers) {
+  const response = await courseApi.post(
+    `/${courseId}/quizzes/${quizId}/submit`,
+    { answers },
+    authConfig(token),
+  );
+
+  return response.data;
+}

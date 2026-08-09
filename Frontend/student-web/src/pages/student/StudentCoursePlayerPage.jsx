@@ -9,11 +9,15 @@ import {
   Trophy,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useParams } from "react-router";
+import { useParams } from "react-router";
 
 import Navbar from "../../components/layout/Navbar";
 import { useAuth } from "../../contexts/AuthContext";
-import { getCourseById } from "../../services/course.service";
+import {
+  getStudentCourseById,
+  getStudentQuiz,
+  submitCourseQuiz,
+} from "../../services/course.service";
 import {
   addLearningTime,
   getEnrollmentProgress,
@@ -42,20 +46,31 @@ function clampProgress(value) {
   return Math.min(Math.max(Number(value || 0), 0), 100);
 }
 
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    String(value || ""),
+  );
+}
+
 function StudentCoursePlayerPage() {
   const { courseId } = useParams();
-  const location = useLocation();
   const { token } = useAuth();
 
-  const [enrollmentId, setEnrollmentId] = useState(
-    location.state?.enrollmentId || null,
-  );
+  // ID de progression PostgreSQL uniquement.
+  // L'autorisation d'accès au cours est vérifiée par course-service.
+  const [enrollmentId, setEnrollmentId] = useState(null);
 
   const [course, setCourse] = useState(null);
   const [selectedResource, setSelectedResource] = useState(null);
   const [openedModules, setOpenedModules] = useState([]);
   const [completedResources, setCompletedResources] = useState([]);
   const [overallProgress, setOverallProgress] = useState(0);
+
+  const [quiz, setQuiz] = useState(null);
+  const [quizAnswers, setQuizAnswers] = useState({});
+  const [quizLoading, setQuizLoading] = useState(false);
+  const [quizSubmitting, setQuizSubmitting] = useState(false);
+  const [quizResult, setQuizResult] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [loadingProgress, setLoadingProgress] = useState(false);
@@ -104,11 +119,25 @@ function StudentCoursePlayerPage() {
         setLoading(true);
         setError("");
 
-        const [courseResponse, enrollmentsResponse] =
+        /*
+         * course-service est la source de vérité pour l'accès au cours.
+         * Si getStudentCourseById réussit, l'étudiant est bien inscrit
+         * (cours gratuit ou payant).
+         *
+         * progress-service est facultatif ici : un cours gratuit peut
+         * exister dans MongoDB avant qu'une inscription de progression
+         * soit créée dans PostgreSQL.
+         */
+        const [studentCourseResponse, enrollmentsResponse] =
           await Promise.all([
-            getCourseById(courseId),
-            getMyEnrollments(token),
+            getStudentCourseById(token, courseId),
+            getMyEnrollments(token).catch(() => ({
+              enrollments: [],
+            })),
           ]);
+
+        const courseResponse =
+          studentCourseResponse?.course || studentCourseResponse;
 
         if (!active) {
           return;
@@ -117,24 +146,37 @@ function StudentCoursePlayerPage() {
         const enrollments =
           enrollmentsResponse?.enrollments || [];
 
-        const currentEnrollment = enrollments.find(
+        const progressEnrollment = enrollments.find(
           (enrollment) =>
             String(enrollment.course_id) === String(courseId),
         );
 
-        if (!currentEnrollment) {
-          throw new Error(
-            "Vous n’êtes pas inscrit à ce cours.",
+        /*
+         * progress-service utilise un identifiant PostgreSQL au format UUID.
+         * L'identifiant MongoDB de CourseEnrollment (24 caractères hexadécimaux)
+         * ne doit jamais être envoyé à /api/progress/enrollments/:id/progress.
+         */
+        if (
+          progressEnrollment &&
+          isUuid(progressEnrollment.id)
+        ) {
+          setEnrollmentId(progressEnrollment.id);
+
+          setOverallProgress(
+            clampProgress(
+              progressEnrollment.progress_percentage,
+            ),
+          );
+        } else {
+          // Le cours reste accessible même si aucune progression PostgreSQL
+          // valide n'existe encore.
+          setEnrollmentId(null);
+          setOverallProgress(
+            clampProgress(
+              progressEnrollment?.progress_percentage || 0,
+            ),
           );
         }
-
-        setEnrollmentId(currentEnrollment.id);
-
-        setOverallProgress(
-          clampProgress(
-            currentEnrollment.progress_percentage,
-          ),
-        );
 
         setCourse(courseResponse);
 
@@ -247,11 +289,10 @@ function StudentCoursePlayerPage() {
           requestError,
         );
 
+        // Une erreur de progression ne doit pas bloquer l'ouverture du cours.
+        // L'accès au contenu est déjà validé par course-service.
         if (active) {
-          setError(
-            requestError.response?.data?.message ||
-              "Impossible de charger la progression du cours.",
-          );
+          setCompletedResources([]);
         }
       } finally {
         if (active) {
@@ -275,7 +316,8 @@ function StudentCoursePlayerPage() {
     if (
       !token ||
       !enrollmentId ||
-      !selectedResource
+      !selectedResource ||
+      selectedResource.type === "QUIZ"
     ) {
       return undefined;
     }
@@ -345,6 +387,109 @@ function StudentCoursePlayerPage() {
     });
 
     setError("");
+  };
+
+  const handleSelectQuiz = async (quizMeta) => {
+    if (!quizMeta?._id || !token || !courseId) {
+      return;
+    }
+
+    try {
+      setError("");
+      setQuizLoading(true);
+      setQuizResult(null);
+      setQuizAnswers({});
+
+      setSelectedResource({
+        _id: quizMeta._id,
+        title: quizMeta.title,
+        description: quizMeta.description,
+        type: "QUIZ",
+        moduleId: quizMeta.moduleId,
+        moduleTitle: "Quiz du cours",
+      });
+
+      const response = await getStudentQuiz(
+        token,
+        courseId,
+        quizMeta._id,
+      );
+
+      setQuiz(response?.quiz || null);
+    } catch (requestError) {
+      setQuiz(null);
+      setError(
+        requestError.response?.data?.message ||
+          requestError.message ||
+          "Impossible de charger le quiz.",
+      );
+    } finally {
+      setQuizLoading(false);
+    }
+  };
+
+  const handleQuizOptionChange = (question, optionId) => {
+    const questionId = String(question.id || question._id);
+    const normalizedOptionId = String(optionId);
+    const isMultiple =
+      String(question.type || "").toUpperCase() === "MULTIPLE_CHOICE";
+
+    setQuizAnswers((current) => {
+      const selected = Array.isArray(current[questionId])
+        ? current[questionId]
+        : [];
+
+      if (!isMultiple) {
+        return {
+          ...current,
+          [questionId]: [normalizedOptionId],
+        };
+      }
+
+      return {
+        ...current,
+        [questionId]: selected.includes(normalizedOptionId)
+          ? selected.filter((id) => id !== normalizedOptionId)
+          : [...selected, normalizedOptionId],
+      };
+    });
+  };
+
+  const handleSubmitQuiz = async () => {
+    if (!quiz?.id || !token || !courseId) {
+      return;
+    }
+
+    try {
+      setQuizSubmitting(true);
+      setError("");
+
+      const answers = (quiz.questions || []).map((question) => {
+        const questionId = String(question.id || question._id);
+
+        return {
+          questionId,
+          selectedOptionIds: quizAnswers[questionId] || [],
+        };
+      });
+
+      const response = await submitCourseQuiz(
+        token,
+        courseId,
+        quiz.id,
+        answers,
+      );
+
+      setQuizResult(response?.result || null);
+    } catch (requestError) {
+      setError(
+        requestError.response?.data?.message ||
+          requestError.message ||
+          "Impossible de soumettre le quiz.",
+      );
+    } finally {
+      setQuizSubmitting(false);
+    }
   };
 
   const handleCompleteResource = async () => {
@@ -678,6 +823,64 @@ function StudentCoursePlayerPage() {
                   );
                 },
               )}
+
+              {(course?.quizzes || []).length > 0 && (
+                <section className="border-b border-slate-100">
+                  <div className="px-5 pb-2 pt-5">
+                    <p className="text-xs font-black uppercase tracking-wide text-violet-600">
+                      Quiz du cours
+                    </p>
+                  </div>
+
+                  {(course.quizzes || []).map((quizMeta) => {
+                    const quizId = String(quizMeta._id);
+                    const isSelected =
+                      selectedResource?.type === "QUIZ" &&
+                      String(selectedResource?._id) === quizId;
+
+                    return (
+                      <button
+                        key={quizId}
+                        type="button"
+                        onClick={() => handleSelectQuiz(quizMeta)}
+                        className={`flex w-full items-start gap-3 px-5 py-4 text-left transition ${
+                          isSelected
+                            ? "bg-violet-50"
+                            : "hover:bg-slate-50"
+                        }`}
+                      >
+                        <span
+                          className={`mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl ${
+                            isSelected
+                              ? "bg-violet-100 text-violet-700"
+                              : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          <Trophy size={18} />
+                        </span>
+
+                        <div className="min-w-0">
+                          <p
+                            className={`font-bold ${
+                              isSelected
+                                ? "text-violet-700"
+                                : "text-slate-800"
+                            }`}
+                          >
+                            {quizMeta.title}
+                          </p>
+
+                          {quizMeta.description && (
+                            <p className="mt-1 line-clamp-2 text-xs text-slate-500">
+                              {quizMeta.description}
+                            </p>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </section>
+              )}
             </div>
           </aside>
 
@@ -751,18 +954,160 @@ function StudentCoursePlayerPage() {
 
                   {selectedResource.type ===
                     "QUIZ" && (
-                    <div className="rounded-2xl bg-violet-50 p-6 text-violet-900">
+                    <div className="rounded-2xl bg-violet-50 p-6 text-violet-950">
                       <Trophy size={32} />
 
-                      <h3 className="mt-4 text-xl font-black">
-                        Quiz
-                      </h3>
+                      {quizLoading ? (
+                        <div className="py-10 text-center">
+                          <LoaderCircle
+                            size={34}
+                            className="mx-auto animate-spin text-violet-600"
+                          />
+                          <p className="mt-3 font-bold">
+                            Chargement du quiz...
+                          </p>
+                        </div>
+                      ) : quiz ? (
+                        <>
+                          <h3 className="mt-4 text-2xl font-black">
+                            {quiz.title}
+                          </h3>
 
-                      <p className="mt-2 leading-7">
-                        Le lecteur de quiz sera
-                        connecté dans la prochaine
-                        étape.
-                      </p>
+                          {quiz.description && (
+                            <p className="mt-2 leading-7 text-violet-800">
+                              {quiz.description}
+                            </p>
+                          )}
+
+                          <div className="mt-4 flex flex-wrap gap-2 text-xs font-bold">
+                            <span className="rounded-full bg-white px-3 py-1">
+                              Note de passage : {quiz.passingScore ?? 70} %
+                            </span>
+                            {quiz.maxAttempts && (
+                              <span className="rounded-full bg-white px-3 py-1">
+                                Tentatives : {quiz.maxAttempts}
+                              </span>
+                            )}
+                            {quiz.timeLimitMinutes && (
+                              <span className="rounded-full bg-white px-3 py-1">
+                                Temps : {quiz.timeLimitMinutes} min
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="mt-6 space-y-5">
+                            {(quiz.questions || []).map(
+                              (question, questionIndex) => {
+                                const questionId = String(
+                                  question.id || question._id,
+                                );
+                                const selected =
+                                  quizAnswers[questionId] || [];
+                                const isMultiple =
+                                  String(
+                                    question.type || "",
+                                  ).toUpperCase() ===
+                                  "MULTIPLE_CHOICE";
+
+                                return (
+                                  <div
+                                    key={questionId}
+                                    className="rounded-2xl bg-white p-5 shadow-sm"
+                                  >
+                                    <p className="font-black text-slate-950">
+                                      {questionIndex + 1}. {question.question}
+                                    </p>
+
+                                    <div className="mt-4 space-y-2">
+                                      {(question.options || []).map(
+                                        (option) => {
+                                          const optionId = String(
+                                            option.id || option._id,
+                                          );
+                                          const checked =
+                                            selected.includes(optionId);
+
+                                          return (
+                                            <label
+                                              key={optionId}
+                                              className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 hover:border-violet-300"
+                                            >
+                                              <input
+                                                type={
+                                                  isMultiple
+                                                    ? "checkbox"
+                                                    : "radio"
+                                                }
+                                                name={`question-${questionId}`}
+                                                checked={checked}
+                                                onChange={() =>
+                                                  handleQuizOptionChange(
+                                                    question,
+                                                    optionId,
+                                                  )
+                                                }
+                                                className="mt-1"
+                                              />
+
+                                              <span className="text-sm font-semibold text-slate-700">
+                                                {option.text}
+                                              </span>
+                                            </label>
+                                          );
+                                        },
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              },
+                            )}
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={handleSubmitQuiz}
+                            disabled={quizSubmitting}
+                            className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 px-6 py-4 font-black text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {quizSubmitting && (
+                              <LoaderCircle
+                                size={20}
+                                className="animate-spin"
+                              />
+                            )}
+
+                            {quizSubmitting
+                              ? "Correction..."
+                              : "Soumettre le quiz"}
+                          </button>
+
+                          {quizResult && (
+                            <div
+                              className={`mt-6 rounded-2xl p-5 ${
+                                quizResult.passed
+                                  ? "bg-emerald-100 text-emerald-900"
+                                  : "bg-amber-100 text-amber-900"
+                              }`}
+                            >
+                              <p className="text-xl font-black">
+                                Résultat : {quizResult.score} %
+                              </p>
+                              <p className="mt-2 font-bold">
+                                {quizResult.passed
+                                  ? "Quiz réussi."
+                                  : "La note de passage n’est pas encore atteinte."}
+                              </p>
+                              <p className="mt-2 text-sm">
+                                Bonnes réponses : {quizResult.correctAnswers} / {quizResult.totalQuestions}
+                              </p>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <p className="mt-4 font-bold">
+                          Impossible de charger ce quiz.
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -789,6 +1134,7 @@ function StudentCoursePlayerPage() {
                     </div>
                   )}
 
+                  {selectedResource.type !== "QUIZ" && (
                   <button
                     type="button"
                     onClick={
@@ -821,6 +1167,7 @@ function StudentCoursePlayerPage() {
                         ? "Enregistrement..."
                         : "Marquer comme terminé"}
                   </button>
+                  )}
                 </div>
               </div>
             ) : (

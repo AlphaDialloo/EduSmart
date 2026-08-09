@@ -2,9 +2,15 @@ const router = require("express").Router();
 
 const courseController = require("../controllers/course.controller");
 
-const { authenticate, authorize } = require("../middlewares/auth.middleware");
+const {
+  authenticate,
+  authorize,
+} = require("../middlewares/auth.middleware");
 
-const instructorOrAdmin = [authenticate, authorize("INSTRUCTOR", "ADMIN")];
+const instructorOrAdmin = [
+  authenticate,
+  authorize("INSTRUCTOR", "ADMIN"),
+];
 
 const verifyInternal = require("../middlewares/internal.middleware");
 
@@ -32,6 +38,13 @@ router.get(
   courseController.getStudentCourseById,
 );
 
+router.post(
+  "/student/enrollments/:courseId/free",
+  authenticate,
+  authorize("STUDENT"),
+  courseController.enrollFreeCourse,
+);
+
 router.get(
   "/management/instructor-dashboard",
   ...instructorOrAdmin,
@@ -46,12 +59,25 @@ router.get(
 );
 
 // Création d’un cours
-router.post("/", ...instructorOrAdmin, courseController.create);
+router.post(
+  "/",
+  ...instructorOrAdmin,
+  courseController.create,
+);
 
 // Modification d’un cours
-router.put("/:id", ...instructorOrAdmin, courseController.update);
+router.put(
+  "/:id",
+  ...instructorOrAdmin,
+  courseController.update,
+);
 
-router.post("/:id/modules", ...instructorOrAdmin, courseController.addModule);
+// Modules
+router.post(
+  "/:id/modules",
+  ...instructorOrAdmin,
+  courseController.addModule,
+);
 
 router.put(
   "/:courseId/modules/:moduleId",
@@ -65,6 +91,7 @@ router.delete(
   courseController.deleteModule,
 );
 
+// Ressources
 router.post(
   "/:courseId/modules/:moduleId/resources",
   ...instructorOrAdmin,
@@ -83,6 +110,7 @@ router.delete(
   courseController.deleteResource,
 );
 
+// Quiz - formateur
 router.post(
   "/:courseId/quizzes",
   ...instructorOrAdmin,
@@ -99,6 +127,14 @@ router.get(
   "/:courseId/quizzes/:quizId",
   ...instructorOrAdmin,
   courseController.getQuiz,
+);
+
+// Quiz - étudiant
+router.get(
+  "/:courseId/quizzes/:quizId/student",
+  authenticate,
+  authorize("STUDENT"),
+  courseController.getStudentQuiz,
 );
 
 router.put(
@@ -120,13 +156,12 @@ router.post(
   courseController.submitQuiz,
 );
 
-/*
-|--------------------------------------------------------------------------
-| Publication et archivage
-|--------------------------------------------------------------------------
-*/
-
-router.patch("/:id/publish", ...instructorOrAdmin, courseController.publish);
+// Publication et archivage
+router.patch(
+  "/:id/publish",
+  ...instructorOrAdmin,
+  courseController.publish,
+);
 
 router.patch(
   "/:id/unpublish",
@@ -134,18 +169,13 @@ router.patch(
   courseController.unpublish,
 );
 
-router.patch("/:id/archive", ...instructorOrAdmin, courseController.archive);
+router.patch(
+  "/:id/archive",
+  ...instructorOrAdmin,
+  courseController.archive,
+);
 
-/*
-|--------------------------------------------------------------------------
-| Détail public
-|--------------------------------------------------------------------------
-|
-| Cette route dynamique doit rester après les routes fixes comme
-| /management/my-courses.
-|
-*/
-
+// Routes internes
 router.get(
   "/internal/:courseId/payment-details",
   verifyInternal,
@@ -157,6 +187,8 @@ router.post(
   verifyInternal,
   courseController.grantAccess,
 );
+
+// Administration
 router.get(
   "/admin/summary",
   authenticate,
@@ -178,6 +210,11 @@ router.patch(
   courseController.adminUpdateStatus,
 );
 
-router.get("/:id", courseController.getOne);
+// Détail public
+// Cette route dynamique doit rester à la fin.
+router.get(
+  "/:id",
+  courseController.getOne,
+);
 
 module.exports = router;

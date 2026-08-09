@@ -242,6 +242,104 @@ exports.getQuiz = async (req, res) => {
   }
 };
 
+exports.getStudentQuiz = async (req, res) => {
+  try {
+    const { courseId, quizId } = req.params;
+    const studentId = req.user?.id || req.user?.userId || req.user?.sub;
+
+    if (!studentId) {
+      return res.status(401).json({
+        message: "Utilisateur non authentifié.",
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(courseId)) {
+      return res.status(400).json({
+        message: "Identifiant du cours invalide.",
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(quizId)) {
+      return res.status(400).json({
+        message: "Identifiant du quiz invalide.",
+      });
+    }
+
+    const now = new Date();
+
+    const enrollment = await CourseEnrollment.findOne({
+      studentId,
+      courseId,
+      status: "ACTIVE",
+      $or: [
+        { expiresAt: null },
+        { expiresAt: { $exists: false } },
+        { expiresAt: { $gt: now } },
+      ],
+    }).lean();
+
+    if (!enrollment) {
+      return res.status(403).json({
+        message: "Vous n’avez pas accès à ce cours.",
+      });
+    }
+
+    const course = await Course.findOne({
+      _id: courseId,
+      status: "PUBLISHED",
+      isActive: true,
+    });
+
+    if (!course) {
+      return res.status(404).json({
+        message: "Cours introuvable ou indisponible.",
+      });
+    }
+
+    const quiz = course.quizzes.id(quizId);
+
+    if (!quiz) {
+      return res.status(404).json({
+        message: "Quiz introuvable.",
+      });
+    }
+
+    if (quiz.isActive === false) {
+      return res.status(403).json({
+        message: "Ce quiz n’est pas disponible.",
+      });
+    }
+
+    const questions = (quiz.questions || []).map((question) => ({
+      id: String(question._id),
+      question: question.question,
+      type: question.type,
+      points: question.points,
+      order: question.order,
+      options: (question.options || []).map((option) => ({
+        id: String(option._id),
+        text: option.text,
+      })),
+    }));
+
+    return res.status(200).json({
+      quiz: {
+        id: String(quiz._id),
+        courseId: String(course._id),
+        moduleId: quiz.moduleId ? String(quiz.moduleId) : null,
+        title: quiz.title,
+        description: quiz.description,
+        passingScore: quiz.passingScore,
+        timeLimitMinutes: quiz.timeLimitMinutes,
+        maxAttempts: quiz.maxAttempts,
+        questions,
+      },
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
 exports.updateQuiz = async (req, res) => {
   try {
     const { courseId, quizId } = req.params;
@@ -1471,6 +1569,101 @@ exports.unpublish = async (req, res) => {
     return res.status(200).json({
       message: "Le cours a été replacé en brouillon.",
       course,
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+
+exports.enrollFreeCourse = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const studentId = req.user?.id || req.user?.userId || req.user?.sub;
+
+    if (!studentId) {
+      return res.status(401).json({
+        message: "Utilisateur non authentifié.",
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(courseId)) {
+      return res.status(400).json({
+        message: "Identifiant du cours invalide.",
+      });
+    }
+
+    const course = await Course.findOne({
+      _id: courseId,
+      status: "PUBLISHED",
+      isActive: true,
+    });
+
+    if (!course) {
+      return res.status(404).json({
+        message: "Cours introuvable ou indisponible.",
+      });
+    }
+
+    if (course.pricing?.isFree !== true) {
+      return res.status(409).json({
+        message: "Ce cours n’est pas gratuit.",
+      });
+    }
+
+    const features = {
+      courseContent: true,
+      forumAccess: false,
+      instructorMessaging: false,
+      personalizedFollowUp: false,
+      assignmentCorrection: false,
+      certificateAccess: true,
+    };
+
+    const existingEnrollment = await CourseEnrollment.findOne({
+      courseId: course._id,
+      studentId,
+    });
+
+    if (existingEnrollment) {
+      existingEnrollment.status = "ACTIVE";
+      existingEnrollment.accessPlanId = null;
+      existingEnrollment.planType = "FREE";
+      existingEnrollment.durationMonths = null;
+      existingEnrollment.expiresAt = null;
+      existingEnrollment.revokedAt = null;
+      existingEnrollment.features = features;
+
+      if (!existingEnrollment.grantedAt) {
+        existingEnrollment.grantedAt = new Date();
+      }
+
+      await existingEnrollment.save();
+
+      return res.status(200).json({
+        message: "Vous êtes déjà inscrit à ce cours.",
+        enrollment: existingEnrollment,
+        created: false,
+      });
+    }
+
+    const enrollment = await CourseEnrollment.create({
+      courseId: course._id,
+      studentId,
+      accessPlanId: null,
+      planType: "FREE",
+      durationMonths: null,
+      status: "ACTIVE",
+      grantedAt: new Date(),
+      expiresAt: null,
+      revokedAt: null,
+      features,
+    });
+
+    return res.status(201).json({
+      message: "Inscription gratuite réussie.",
+      enrollment,
+      created: true,
     });
   } catch (error) {
     return sendError(res, error);

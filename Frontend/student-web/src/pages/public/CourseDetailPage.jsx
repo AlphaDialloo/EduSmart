@@ -11,22 +11,26 @@ import {
   UserRound,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 
 import CourseCurriculum from "../../components/courses/CourseCurriculum";
 import PricingPlanCard from "../../components/courses/PricingPlanCard";
 import { useCart } from "../../contexts/CartContext";
-import { getCourseById } from "../../services/course.service";
+import { useAuth } from "../../contexts/AuthContext";
+import courseApi, { getCourseById } from "../../services/course.service";
 
 function CourseDetailPage() {
   const { courseId } = useParams();
+  const navigate = useNavigate();
   const { addToCart } = useCart();
+  const { token } = useAuth();
 
   const [course, setCourse] = useState(null);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [cartMessage, setCartMessage] = useState("");
+  const [freeEnrollmentLoading, setFreeEnrollmentLoading] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -117,6 +121,49 @@ function CourseDetailPage() {
     window.setTimeout(() => {
       setCartMessage("");
     }, 3000);
+  };
+
+  const handleFreeEnrollment = async () => {
+    if (!course?.isFree) {
+      return;
+    }
+
+    if (!token) {
+      setError("Connectez-vous avec un compte étudiant pour vous inscrire.");
+      return;
+    }
+
+    try {
+      setFreeEnrollmentLoading(true);
+      setError("");
+      setCartMessage("");
+
+      const response = await courseApi.post(
+        `/student/enrollments/${course.id || course._id}/free`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      setCartMessage(
+        response.data?.message || "Inscription gratuite réussie.",
+      );
+
+      window.setTimeout(() => {
+        navigate("/student/courses");
+      }, 700);
+    } catch (requestError) {
+      setError(
+        requestError.response?.data?.message ||
+          requestError.message ||
+          "Impossible de vous inscrire gratuitement à ce cours.",
+      );
+    } finally {
+      setFreeEnrollmentLoading(false);
+    }
   };
 
   if (loading) {
@@ -323,6 +370,25 @@ function CourseDetailPage() {
                 <p className="mt-3 text-2xl font-black text-emerald-900">
                   Cours gratuit
                 </p>
+
+                <button
+                  type="button"
+                  onClick={handleFreeEnrollment}
+                  disabled={freeEnrollmentLoading}
+                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 py-4 font-black text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {freeEnrollmentLoading ? (
+                    <>
+                      <LoaderCircle size={20} className="animate-spin" />
+                      Inscription...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 size={20} />
+                      S'inscrire gratuitement
+                    </>
+                  )}
+                </button>
               </div>
             ) : (
               <div className="mt-6 space-y-4">
@@ -359,8 +425,9 @@ function CourseDetailPage() {
             )}
 
             <div className="mt-6 border-t border-slate-200 pt-5 text-center text-xs leading-5 text-slate-500">
-              Paiement sécurisé. L’accès commence après la
-              confirmation du paiement.
+              {course.isFree
+                ? "Accès immédiat après l’inscription."
+                : "Paiement sécurisé. L’accès commence après la confirmation du paiement."}
             </div>
           </div>
         </aside>

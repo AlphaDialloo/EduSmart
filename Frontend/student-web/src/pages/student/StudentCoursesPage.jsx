@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 
 import { useAuth } from "../../contexts/AuthContext";
-import { getCourseById } from "../../services/course.service";
+import courseApi, { getCourseById } from "../../services/course.service";
 import { getMyEnrollments } from "../../services/progress.service";
 import Navbar from "../../components/layout/Navbar";
 
@@ -33,48 +33,109 @@ function StudentCoursesPage() {
         setLoading(true);
         setError("");
 
-        const enrollmentResponse = await getMyEnrollments(token);
-        const enrollments = enrollmentResponse?.enrollments || [];
+        /*
+         * La source de vérité pour savoir si l'étudiant possède un cours
+         * est maintenant course-service. Cela permet d'afficher aussi
+         * les cours gratuits, qui ne passent pas par le paiement.
+         *
+         * progress-service reste utilisé uniquement pour récupérer
+         * la progression lorsqu'elle existe déjà.
+         */
+        const [courseEnrollmentResponse, progressResponse] =
+          await Promise.all([
+            courseApi.get("/student/enrollments", {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            }),
+            getMyEnrollments(token).catch(() => ({
+              enrollments: [],
+            })),
+          ]);
+
+        const courseEnrollments =
+          courseEnrollmentResponse?.data?.courses || [];
+
+        const progressEnrollments =
+          progressResponse?.enrollments || [];
+
+        const progressByCourseId = new Map(
+          progressEnrollments.map((enrollment) => [
+            String(enrollment.course_id),
+            enrollment,
+          ]),
+        );
 
         const enrichedCourses = await Promise.all(
-          enrollments.map(async (enrollment) => {
+          courseEnrollments.map(async (enrollment) => {
+            const rawCourse = enrollment?.course || {};
+            const courseId =
+              rawCourse?._id ||
+              rawCourse?.id ||
+              enrollment?.courseId;
+
+            const progressEnrollment =
+              progressByCourseId.get(String(courseId));
+
             try {
-              const course = await getCourseById(
-                enrollment.course_id,
-              );
+              const course = await getCourseById(courseId);
 
               return {
-                enrollmentId: enrollment.id,
-                status: enrollment.status,
+                enrollmentId: enrollment.enrollmentId,
+                status:
+                  progressEnrollment?.status ||
+                  enrollment.status ||
+                  "ACTIVE",
                 progress: formatProgress(
-                  enrollment.progress_percentage,
+                  progressEnrollment?.progress_percentage || 0,
                 ),
-                startedAt: enrollment.started_at,
-                updatedAt: enrollment.updated_at,
+                startedAt:
+                  progressEnrollment?.started_at ||
+                  enrollment.grantedAt,
+                updatedAt:
+                  progressEnrollment?.updated_at ||
+                  enrollment.grantedAt,
                 course,
               };
             } catch (courseError) {
               console.error(
-                `Impossible de charger le cours ${enrollment.course_id} :`,
+                `Impossible de charger le cours ${courseId} :`,
                 courseError,
               );
 
               return {
-                enrollmentId: enrollment.id,
-                status: enrollment.status,
+                enrollmentId: enrollment.enrollmentId,
+                status:
+                  progressEnrollment?.status ||
+                  enrollment.status ||
+                  "ACTIVE",
                 progress: formatProgress(
-                  enrollment.progress_percentage,
+                  progressEnrollment?.progress_percentage || 0,
                 ),
-                startedAt: enrollment.started_at,
-                updatedAt: enrollment.updated_at,
+                startedAt:
+                  progressEnrollment?.started_at ||
+                  enrollment.grantedAt,
+                updatedAt:
+                  progressEnrollment?.updated_at ||
+                  enrollment.grantedAt,
                 course: {
-                  id: enrollment.course_id,
-                  title: enrollment.course_title,
-                  instructor: "Instructeur EduSmart",
+                  id: courseId,
+                  title: rawCourse?.title || "Cours EduSmart",
+                  instructor:
+                    rawCourse?.instructor?.fullName ||
+                    rawCourse?.instructorName ||
+                    "Instructeur EduSmart",
                   image:
+                    rawCourse?.thumbnail?.url ||
                     "https://placehold.co/900x520/e2e8f0/475569?text=EduSmart",
-                  imageAlt: enrollment.course_title,
-                  category: "Formation",
+                  imageAlt:
+                    rawCourse?.thumbnail?.altText ||
+                    rawCourse?.title ||
+                    "Cours EduSmart",
+                  category:
+                    rawCourse?.categoryId?.name ||
+                    rawCourse?.category?.name ||
+                    "Formation",
                   duration: "Durée à venir",
                 },
               };
