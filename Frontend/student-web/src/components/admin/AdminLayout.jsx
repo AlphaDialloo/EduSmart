@@ -1,54 +1,39 @@
-import {
-  BookOpen,
-  CreditCard,
-  LayoutDashboard,
-  FolderTree,
-  LogOut,
-  Menu,
-  UsersRound,
-  X,
-} from "lucide-react";
+import { BookOpen, CreditCard, LayoutDashboard, FolderTree, LogOut, Menu, UsersRound, X } from "lucide-react";
 import { useState } from "react";
 import { NavLink, Outlet } from "react-router";
-
 import { useAuth } from "../../contexts/AuthContext";
-
-const items = [
-  {
-    to: "/admin",
-    label: "Tableau de bord",
-    icon: LayoutDashboard,
-    end: true,
-  },
-  {
-    to: "/admin/users",
-    label: "Utilisateurs",
-    icon: UsersRound,
-  },
-  {
-    to: "/admin/courses",
-    label: "Cours",
-    icon: BookOpen,
-  },
-  {
-    label: "Catégories",
-    to: "/admin/categories",
-    icon: FolderTree,
-  },
-  {
-    to: "/admin/payments",
-    label: "Paiements",
-    icon: CreditCard,
-  },
-];
-
-function SidebarContent({ onNavigate }) {
-  const { user, logout } = useAuth();
-
-  return (
-    <div className="flex h-full flex-col">
+const items = [{
+  to: "/admin",
+  label: "Tableau de bord",
+  icon: LayoutDashboard,
+  end: true
+}, {
+  to: "/admin/users",
+  label: "Utilisateurs",
+  icon: UsersRound
+}, {
+  to: "/admin/courses",
+  label: "Cours",
+  icon: BookOpen
+}, {
+  label: "Catégories",
+  to: "/admin/categories",
+  icon: FolderTree
+}, {
+  to: "/admin/payments",
+  label: "Paiements",
+  icon: CreditCard
+}];
+function SidebarContent({
+  onNavigate
+}) {
+  const {
+    user,
+    logout
+  } = useAuth();
+  return <div className="flex h-full flex-col">
       <div className="border-b border-slate-800 px-6 py-6">
-        <p className="text-xs font-black uppercase tracking-[0.25em] text-indigo-400">
+        <p className="text-xs font-black uppercase tracking-[0.25em] text-emerald-400">
           EduSmart
         </p>
 
@@ -58,29 +43,19 @@ function SidebarContent({ onNavigate }) {
       </div>
 
       <nav className="flex-1 space-y-2 p-4">
-        {items.map((item) => {
-          const Icon = item.icon;
-
-          return (
-            <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            onClick={onNavigate}
-            style={({ isActive }) => ({
-              color: isActive ? "#ffffff" : "#cbd5e1",
-              backgroundColor: isActive
-                ? "#4f46e5"
-                : "transparent",
-            })}
-            className="flex items-center gap-3 rounded-2xl px-4 py-3.5 text-sm font-black transition hover:bg-slate-800"
-          >
+        {items.map(item => {
+        const Icon = item.icon;
+        return <NavLink key={item.to} to={item.to} end={item.end} onClick={onNavigate} style={({
+          isActive
+        }) => ({
+          color: isActive ? "#ffffff" : "#d6cec4",
+          backgroundColor: isActive ? "#0f766e" : "transparent"
+        })} className="flex items-center gap-3 rounded-2xl px-4 py-3.5 text-sm font-black transition hover:bg-slate-800">
             <Icon size={20} />
 
             <span>{item.label}</span>
-          </NavLink>
-          );
-        })}
+          </NavLink>;
+      })}
       </nav>
 
       <div className="border-t border-slate-800 p-4">
@@ -94,60 +69,35 @@ function SidebarContent({ onNavigate }) {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={logout}
-          className="mt-3 flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-black text-red-300 transition hover:bg-red-500/10"
-        >
+        <button type="button" onClick={logout} className="mt-3 flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-black text-red-300 transition hover:bg-red-500/10">
           <LogOut size={19} />
           Déconnexion
         </button>
       </div>
-    </div>
-  );
+    </div>;
 }
-
 export default function AdminLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  return (
-    <div className="min-h-screen bg-[#f7f8fc]">
+  return <div className="min-h-screen bg-[#fffbf5]">
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 bg-slate-950 lg:block">
         <SidebarContent />
       </aside>
 
-      {mobileOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <button
-            type="button"
-            aria-label="Fermer le menu"
-            onClick={() => setMobileOpen(false)}
-            className="absolute inset-0 bg-slate-950/55"
-          />
+      {mobileOpen && <div className="fixed inset-0 z-50 lg:hidden">
+          <button type="button" aria-label="Fermer le menu" onClick={() => setMobileOpen(false)} className="absolute inset-0 bg-slate-950/55" />
 
           <aside className="relative h-full w-72 bg-slate-950 shadow-2xl">
-            <button
-              type="button"
-              onClick={() => setMobileOpen(false)}
-              className="absolute right-4 top-4 rounded-xl bg-slate-800 p-2 text-white"
-            >
+            <button type="button" onClick={() => setMobileOpen(false)} className="absolute right-4 top-4 rounded-xl bg-slate-800 p-2 text-white">
               <X size={20} />
             </button>
 
-            <SidebarContent
-              onNavigate={() => setMobileOpen(false)}
-            />
+            <SidebarContent onNavigate={() => setMobileOpen(false)} />
           </aside>
-        </div>
-      )}
+        </div>}
 
       <div className="lg:pl-72">
         <header className="sticky top-0 z-30 flex h-16 items-center border-b border-slate-200 bg-white/95 px-5 backdrop-blur lg:px-8">
-          <button
-            type="button"
-            onClick={() => setMobileOpen(true)}
-            className="rounded-xl border border-slate-200 p-2.5 text-slate-700 lg:hidden"
-          >
+          <button type="button" onClick={() => setMobileOpen(true)} className="rounded-xl border border-slate-200 p-2.5 text-slate-700 lg:hidden">
             <Menu size={20} />
           </button>
 
@@ -158,6 +108,5 @@ export default function AdminLayout() {
 
         <Outlet />
       </div>
-    </div>
-  );
+    </div>;
 }

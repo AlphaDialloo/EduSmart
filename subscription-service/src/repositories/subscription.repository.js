@@ -1,8 +1,8 @@
-const { pool } = require("../config/db");
-
+const {
+  pool
+} = require("../config/db");
 function mapPlan(row) {
   if (!row) return null;
-
   return {
     id: row.id,
     code: row.code,
@@ -12,13 +12,11 @@ function mapPlan(row) {
     durationMonths: row.duration_months,
     active: row.active,
     createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    updatedAt: row.updated_at
   };
 }
-
 function mapSubscription(row) {
   if (!row) return null;
-
   return {
     id: row.id,
     instructorId: row.instructor_id,
@@ -36,26 +34,19 @@ function mapSubscription(row) {
     suspendedAt: row.suspended_at,
     autoRenew: row.auto_renew,
     createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    updatedAt: row.updated_at
   };
 }
-
 async function getPlanByCode(code, client = pool) {
-  const result = await client.query(
-    `
+  const result = await client.query(`
       SELECT *
       FROM subscription_service.subscription_plans
       WHERE code = $1 AND active = TRUE
-    `,
-    [code],
-  );
-
+    `, [code]);
   return mapPlan(result.rows[0]);
 }
-
 async function findOpenPending(instructorId, planId, client = pool) {
-  const result = await client.query(
-    `
+  const result = await client.query(`
       SELECT s.*, p.code AS plan_code, p.name AS plan_name
       FROM subscription_service.instructor_subscriptions s
       JOIN subscription_service.subscription_plans p ON p.id = s.plan_id
@@ -64,39 +55,30 @@ async function findOpenPending(instructorId, planId, client = pool) {
         AND s.status = 'PENDING'
       ORDER BY s.created_at DESC
       LIMIT 1
-    `,
-    [instructorId, planId],
-  );
-
+    `, [instructorId, planId]);
   return mapSubscription(result.rows[0]);
 }
-
 async function createSubscription({
   instructorId,
   planId,
   countryCode,
   currency,
   amount,
-  autoRenew = false,
+  autoRenew = false
 }) {
   const client = await pool.connect();
-
   try {
     await client.query("BEGIN");
-    await client.query(
-      "SELECT pg_advisory_xact_lock(hashtext($1))",
-      [`subscription:${instructorId}`],
-    );
-
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`subscription:${instructorId}`]);
     const pending = await findOpenPending(instructorId, planId, client);
-
     if (pending) {
       await client.query("COMMIT");
-      return { subscription: pending, created: false };
+      return {
+        subscription: pending,
+        created: false
+      };
     }
-
-    const result = await client.query(
-      `
+    const result = await client.query(`
         INSERT INTO subscription_service.instructor_subscriptions (
           instructor_id,
           plan_id,
@@ -108,45 +90,30 @@ async function createSubscription({
         )
         VALUES ($1, $2, $3, $4, $5, 'PENDING', $6)
         RETURNING *
-      `,
-      [
-        instructorId,
-        planId,
+      `, [instructorId, planId, countryCode, currency, amount, autoRenew]);
+    await addHistory({
+      subscriptionId: result.rows[0].id,
+      eventType: "CREATED",
+      fromStatus: null,
+      toStatus: "PENDING",
+      actorType: "INSTRUCTOR",
+      actorId: instructorId,
+      metadata: {
         countryCode,
         currency,
-        amount,
-        autoRenew,
-      ],
-    );
-
-    await addHistory(
-      {
-        subscriptionId: result.rows[0].id,
-        eventType: "CREATED",
-        fromStatus: null,
-        toStatus: "PENDING",
-        actorType: "INSTRUCTOR",
-        actorId: instructorId,
-        metadata: { countryCode, currency, amount },
-      },
-      client,
-    );
-
-    const fullResult = await client.query(
-      `
+        amount
+      }
+    }, client);
+    const fullResult = await client.query(`
         SELECT s.*, p.code AS plan_code, p.name AS plan_name
         FROM subscription_service.instructor_subscriptions s
         JOIN subscription_service.subscription_plans p ON p.id = s.plan_id
         WHERE s.id = $1
-      `,
-      [result.rows[0].id],
-    );
-
+      `, [result.rows[0].id]);
     await client.query("COMMIT");
-
     return {
       subscription: mapSubscription(fullResult.rows[0]),
-      created: true,
+      created: true
     };
   } catch (error) {
     await client.query("ROLLBACK");
@@ -155,39 +122,27 @@ async function createSubscription({
     client.release();
   }
 }
-
 async function getMySubscriptions(instructorId) {
-  const result = await pool.query(
-    `
+  const result = await pool.query(`
       SELECT s.*, p.code AS plan_code, p.name AS plan_name
       FROM subscription_service.instructor_subscriptions s
       JOIN subscription_service.subscription_plans p ON p.id = s.plan_id
       WHERE s.instructor_id = $1
       ORDER BY s.created_at DESC
-    `,
-    [instructorId],
-  );
-
+    `, [instructorId]);
   return result.rows.map(mapSubscription);
 }
-
 async function getSubscriptionById(id, client = pool) {
-  const result = await client.query(
-    `
+  const result = await client.query(`
       SELECT s.*, p.code AS plan_code, p.name AS plan_name
       FROM subscription_service.instructor_subscriptions s
       JOIN subscription_service.subscription_plans p ON p.id = s.plan_id
       WHERE s.id = $1
-    `,
-    [id],
-  );
-
+    `, [id]);
   return mapSubscription(result.rows[0]);
 }
-
 async function getCurrentActive(instructorId, client = pool) {
-  const result = await client.query(
-    `
+  const result = await client.query(`
       SELECT s.*, p.code AS plan_code, p.name AS plan_name
       FROM subscription_service.instructor_subscriptions s
       JOIN subscription_service.subscription_plans p ON p.id = s.plan_id
@@ -197,53 +152,36 @@ async function getCurrentActive(instructorId, client = pool) {
         AND s.expires_at > CURRENT_TIMESTAMP
       ORDER BY s.expires_at DESC
       LIMIT 1
-    `,
-    [instructorId],
-  );
-
+    `, [instructorId]);
   return mapSubscription(result.rows[0]);
 }
-
 async function activateSubscription(id, paymentId, actorId = null) {
   const client = await pool.connect();
-
   try {
     await client.query("BEGIN");
-
-    const locked = await client.query(
-      `
+    const locked = await client.query(`
         SELECT s.*, p.duration_months
         FROM subscription_service.instructor_subscriptions s
         JOIN subscription_service.subscription_plans p ON p.id = s.plan_id
         WHERE s.id = $1
         FOR UPDATE
-      `,
-      [id],
-    );
-
+      `, [id]);
     const subscription = locked.rows[0];
-
     if (!subscription) {
       await client.query("ROLLBACK");
       return null;
     }
-
     if (subscription.status === "ACTIVE") {
       const current = await getSubscriptionById(id, client);
       await client.query("COMMIT");
       return current;
     }
-
     if (!["PENDING", "PAYMENT_FAILED"].includes(subscription.status)) {
-      const error = new Error(
-        `Une adhésion ${subscription.status} ne peut pas être activée.`,
-      );
+      const error = new Error(`Une adhésion ${subscription.status} ne peut pas être activée.`);
       error.statusCode = 409;
       throw error;
     }
-
-    const latestActive = await client.query(
-      `
+    const latestActive = await client.query(`
         SELECT expires_at
         FROM subscription_service.instructor_subscriptions
         WHERE instructor_id = $1
@@ -251,12 +189,8 @@ async function activateSubscription(id, paymentId, actorId = null) {
           AND expires_at > CURRENT_TIMESTAMP
         ORDER BY expires_at DESC
         LIMIT 1
-      `,
-      [subscription.instructor_id],
-    );
-
-    const result = await client.query(
-      `
+      `, [subscription.instructor_id]);
+    const result = await client.query(`
         UPDATE subscription_service.instructor_subscriptions
         SET status = 'ACTIVE',
             payment_id = $2,
@@ -273,28 +207,18 @@ async function activateSubscription(id, paymentId, actorId = null) {
             updated_at = CURRENT_TIMESTAMP
         WHERE id = $1
         RETURNING *
-      `,
-      [
-        id,
-        paymentId,
-        latestActive.rows[0]?.expires_at || null,
-        subscription.duration_months,
-      ],
-    );
-
-    await addHistory(
-      {
-        subscriptionId: id,
-        eventType: "PAYMENT_CONFIRMED",
-        fromStatus: subscription.status,
-        toStatus: "ACTIVE",
-        actorType: "SERVICE",
-        actorId,
-        metadata: { paymentId },
-      },
-      client,
-    );
-
+      `, [id, paymentId, latestActive.rows[0]?.expires_at || null, subscription.duration_months]);
+    await addHistory({
+      subscriptionId: id,
+      eventType: "PAYMENT_CONFIRMED",
+      fromStatus: subscription.status,
+      toStatus: "ACTIVE",
+      actorType: "SERVICE",
+      actorId,
+      metadata: {
+        paymentId
+      }
+    }, client);
     const full = await getSubscriptionById(result.rows[0].id, client);
     await client.query("COMMIT");
     return full;
@@ -305,7 +229,6 @@ async function activateSubscription(id, paymentId, actorId = null) {
     client.release();
   }
 }
-
 async function markPaymentFailed(id, paymentId, reason, actorId = null) {
   return changeStatus({
     id,
@@ -313,12 +236,14 @@ async function markPaymentFailed(id, paymentId, reason, actorId = null) {
     eventType: "PAYMENT_FAILED",
     actorType: "SERVICE",
     actorId,
-    metadata: { paymentId, reason },
+    metadata: {
+      paymentId,
+      reason
+    },
     allowedFrom: ["PENDING"],
-    paymentId,
+    paymentId
   });
 }
-
 async function cancelPending(id, instructorId) {
   return changeStatus({
     id,
@@ -327,10 +252,9 @@ async function cancelPending(id, instructorId) {
     actorType: "INSTRUCTOR",
     actorId: instructorId,
     allowedFrom: ["PENDING", "PAYMENT_FAILED"],
-    ownerId: instructorId,
+    ownerId: instructorId
   });
 }
-
 async function changeStatus({
   id,
   status,
@@ -340,41 +264,29 @@ async function changeStatus({
   metadata = {},
   allowedFrom,
   ownerId,
-  paymentId,
+  paymentId
 }) {
   const client = await pool.connect();
-
   try {
     await client.query("BEGIN");
-
-    const result = await client.query(
-      `
+    const result = await client.query(`
         SELECT *
         FROM subscription_service.instructor_subscriptions
         WHERE id = $1
           ${ownerId ? "AND instructor_id = $2" : ""}
         FOR UPDATE
-      `,
-      ownerId ? [id, ownerId] : [id],
-    );
-
+      `, ownerId ? [id, ownerId] : [id]);
     const current = result.rows[0];
-
     if (!current) {
       await client.query("ROLLBACK");
       return null;
     }
-
     if (allowedFrom && !allowedFrom.includes(current.status)) {
-      const error = new Error(
-        `Le statut ${current.status} ne permet pas cette opération.`,
-      );
+      const error = new Error(`Le statut ${current.status} ne permet pas cette opération.`);
       error.statusCode = 409;
       throw error;
     }
-
-    const update = await client.query(
-      `
+    const update = await client.query(`
         UPDATE subscription_service.instructor_subscriptions
         SET status = $2,
             payment_id = COALESCE($3, payment_id),
@@ -390,23 +302,16 @@ async function changeStatus({
             updated_at = CURRENT_TIMESTAMP
         WHERE id = $1
         RETURNING id
-      `,
-      [id, status, paymentId || null],
-    );
-
-    await addHistory(
-      {
-        subscriptionId: id,
-        eventType,
-        fromStatus: current.status,
-        toStatus: status,
-        actorType,
-        actorId,
-        metadata,
-      },
-      client,
-    );
-
+      `, [id, status, paymentId || null]);
+    await addHistory({
+      subscriptionId: id,
+      eventType,
+      fromStatus: current.status,
+      toStatus: status,
+      actorType,
+      actorId,
+      metadata
+    }, client);
     const full = await getSubscriptionById(update.rows[0].id, client);
     await client.query("COMMIT");
     return full;
@@ -417,7 +322,6 @@ async function changeStatus({
     client.release();
   }
 }
-
 async function updateAdminStatus(id, status, actorId, reason) {
   return changeStatus({
     id,
@@ -425,38 +329,33 @@ async function updateAdminStatus(id, status, actorId, reason) {
     eventType: "ADMIN_STATUS_CHANGED",
     actorType: "ADMIN",
     actorId,
-    metadata: { reason },
+    metadata: {
+      reason
+    }
   });
 }
-
 async function listSubscriptions({
   page = 1,
   limit = 20,
   status,
   instructorId,
-  countryCode,
+  countryCode
 }) {
   const conditions = [];
   const values = [];
-
   function add(value, expression) {
     values.push(value);
     conditions.push(expression.replace("?", `$${values.length}`));
   }
-
   if (status) add(status, "s.status = ?");
   if (instructorId) add(instructorId, "s.instructor_id = ?");
   if (countryCode) add(countryCode, "s.country_code = ?");
-
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   const offset = (page - 1) * limit;
-
   values.push(limit, offset);
   const limitParam = `$${values.length - 1}`;
   const offsetParam = `$${values.length}`;
-
-  const result = await pool.query(
-    `
+  const result = await pool.query(`
       SELECT s.*, p.code AS plan_code, p.name AS plan_name,
              COUNT(*) OVER() AS total_count
       FROM subscription_service.instructor_subscriptions s
@@ -464,32 +363,24 @@ async function listSubscriptions({
       ${where}
       ORDER BY s.created_at DESC
       LIMIT ${limitParam} OFFSET ${offsetParam}
-    `,
-    values,
-  );
-
+    `, values);
   return {
     subscriptions: result.rows.map(mapSubscription),
     total: Number(result.rows[0]?.total_count || 0),
     page,
-    limit,
+    limit
   };
 }
-
-async function addHistory(
-  {
-    subscriptionId,
-    eventType,
-    fromStatus,
-    toStatus,
-    actorType,
-    actorId,
-    metadata = {},
-  },
-  client = pool,
-) {
-  await client.query(
-    `
+async function addHistory({
+  subscriptionId,
+  eventType,
+  fromStatus,
+  toStatus,
+  actorType,
+  actorId,
+  metadata = {}
+}, client = pool) {
+  await client.query(`
       INSERT INTO subscription_service.subscription_history (
         subscription_id,
         event_type,
@@ -500,32 +391,17 @@ async function addHistory(
         metadata
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7::JSONB)
-    `,
-    [
-      subscriptionId,
-      eventType,
-      fromStatus,
-      toStatus,
-      actorType,
-      actorId,
-      JSON.stringify(metadata),
-    ],
-  );
+    `, [subscriptionId, eventType, fromStatus, toStatus, actorType, actorId, JSON.stringify(metadata)]);
 }
-
 async function getHistory(subscriptionId) {
-  const result = await pool.query(
-    `
+  const result = await pool.query(`
       SELECT id, subscription_id, event_type, from_status, to_status,
              actor_type, actor_id, metadata, created_at
       FROM subscription_service.subscription_history
       WHERE subscription_id = $1
       ORDER BY created_at DESC
-    `,
-    [subscriptionId],
-  );
-
-  return result.rows.map((row) => ({
+    `, [subscriptionId]);
+  return result.rows.map(row => ({
     id: row.id,
     subscriptionId: row.subscription_id,
     eventType: row.event_type,
@@ -534,39 +410,30 @@ async function getHistory(subscriptionId) {
     actorType: row.actor_type,
     actorId: row.actor_id,
     metadata: row.metadata,
-    createdAt: row.created_at,
+    createdAt: row.created_at
   }));
 }
-
 async function expireElapsedSubscriptions() {
   const client = await pool.connect();
-
   try {
     await client.query("BEGIN");
-    const result = await client.query(
-      `
+    const result = await client.query(`
         UPDATE subscription_service.instructor_subscriptions
         SET status = 'EXPIRED', updated_at = CURRENT_TIMESTAMP
         WHERE status = 'ACTIVE'
           AND expires_at <= CURRENT_TIMESTAMP
         RETURNING id
-      `,
-    );
-
+      `);
     for (const row of result.rows) {
-      await addHistory(
-        {
-          subscriptionId: row.id,
-          eventType: "EXPIRED",
-          fromStatus: "ACTIVE",
-          toStatus: "EXPIRED",
-          actorType: "SYSTEM",
-          actorId: null,
-        },
-        client,
-      );
+      await addHistory({
+        subscriptionId: row.id,
+        eventType: "EXPIRED",
+        fromStatus: "ACTIVE",
+        toStatus: "EXPIRED",
+        actorType: "SYSTEM",
+        actorId: null
+      }, client);
     }
-
     await client.query("COMMIT");
     return result.rowCount;
   } catch (error) {
@@ -576,7 +443,6 @@ async function expireElapsedSubscriptions() {
     client.release();
   }
 }
-
 module.exports = {
   getPlanByCode,
   createSubscription,
@@ -589,5 +455,5 @@ module.exports = {
   updateAdminStatus,
   listSubscriptions,
   getHistory,
-  expireElapsedSubscriptions,
+  expireElapsedSubscriptions
 };

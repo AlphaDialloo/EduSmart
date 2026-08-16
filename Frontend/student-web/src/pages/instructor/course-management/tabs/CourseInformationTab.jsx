@@ -1,6 +1,5 @@
 import { LoaderCircle, Save } from "lucide-react";
 import { useEffect, useState } from "react";
-
 const emptyForm = {
   title: "",
   description: "",
@@ -8,12 +7,14 @@ const emptyForm = {
   level: "BEGINNER",
   language: "fr",
   tags: "",
-  thumbnailUrl: "",
+  thumbnailUrl: ""
 };
-
-export default function CourseInformationTab({ course, onSave, saving }) {
+export default function CourseInformationTab({
+  course,
+  onSave,
+  saving
+}) {
   const [form, setForm] = useState(emptyForm);
-
   useEffect(() => {
     setForm({
       title: course?.title || "",
@@ -22,16 +23,20 @@ export default function CourseInformationTab({ course, onSave, saving }) {
       level: course?.level || "BEGINNER",
       language: course?.language || "fr",
       tags: Array.isArray(course?.tags) ? course.tags.join(", ") : "",
-      thumbnailUrl: course?.thumbnail?.url || "",
+      thumbnailUrl: course?.thumbnail?.url || ""
     });
   }, [course]);
-
-  const change = (event) => {
-    const { name, value } = event.target;
-    setForm((current) => ({ ...current, [name]: value }));
+  const change = event => {
+    const {
+      name,
+      value
+    } = event.target;
+    setForm(current => ({
+      ...current,
+      [name]: value
+    }));
   };
-
-  const submit = (event) => {
+  const submit = event => {
     event.preventDefault();
     onSave({
       title: form.title.trim(),
@@ -39,23 +44,21 @@ export default function CourseInformationTab({ course, onSave, saving }) {
       categoryId: form.categoryId.trim(),
       level: form.level,
       language: form.language.trim().toLowerCase(),
-      tags: form.tags.split(",").map((tag) => tag.trim()).filter(Boolean),
+      tags: form.tags.split(",").map(tag => tag.trim()).filter(Boolean),
       thumbnail: {
         url: form.thumbnailUrl.trim() || null,
         publicId: course?.thumbnail?.publicId || null,
-        altText: form.title.trim(),
-      },
+        altText: form.title.trim()
+      }
     });
   };
-
-  return (
-    <form onSubmit={submit} className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
+  return <form onSubmit={submit} className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="text-2xl font-black text-slate-950">Informations générales</h2>
           <p className="mt-2 text-sm text-slate-500">Titre, description, catégorie, langue et image.</p>
         </div>
-        <button disabled={saving} className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 font-black text-white disabled:opacity-60">
+        <button disabled={saving} className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 font-black text-white disabled:opacity-60">
           {saving ? <LoaderCircle size={19} className="animate-spin" /> : <Save size={19} />}
           Enregistrer
         </button>
@@ -95,6 +98,5 @@ export default function CourseInformationTab({ course, onSave, saving }) {
           <input name="thumbnailUrl" type="url" value={form.thumbnailUrl} onChange={change} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3.5" />
         </label>
       </div>
-    </form>
-  );
+    </form>;
 }

@@ -1,24 +1,18 @@
 import axios from "axios";
-
-export const API_URL =
-  process.env.EXPO_PUBLIC_API_URL ||
-  "http://192.168.2.15:3000/api";
-
+export const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000/api";
 const api = axios.create({
   baseURL: API_URL,
   timeout: 20000,
   headers: {
-    "Content-Type": "application/json",
-  },
+    "Content-Type": "application/json"
+  }
 });
-
 export function authConfig(token, params) {
   return {
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${token}`
     },
-    params,
+    params
   };
 }
-
 export default api;

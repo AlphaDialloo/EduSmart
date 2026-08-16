@@ -4,7 +4,9 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon src/server.js",
+    "check": "node --check src/server.js && node --check src/routes/recommendation.routes.js && node --check src/controllers/recommendation.controller.js && node --check src/services/recommendation.engine.js",
+    "test": "node --test"
   },
   "dependencies": {
     "axios": "^1.7.9",

@@ -1,62 +1,35 @@
-import {
-  FileText,
-  LoaderCircle,
-  Trash2,
-} from "lucide-react";
+import { FileText, LoaderCircle, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
-
 import { useAuth } from "../../contexts/AuthContext";
 import { uploadDocument } from "../../services/upload.service";
 import UploadProgress from "./UploadProgress";
-
 export default function DocumentUploader({
   value,
-  onChange,
+  onChange
 }) {
-  const { token } = useAuth();
-
+  const {
+    token
+  } = useAuth();
   const inputRef = useRef();
-
   const [uploading, setUploading] = useState(false);
-
   const [progress, setProgress] = useState(0);
-
   async function handleSelect(event) {
     const file = event.target.files?.[0];
-
     if (!file) return;
-
     try {
       setUploading(true);
-
-      const response = await uploadDocument(
-        token,
-        file,
-        setProgress,
-      );
-
+      const response = await uploadDocument(token, file, setProgress);
       onChange(response.file);
-
     } catch (error) {
-      alert(
-        error.response?.data?.message ||
-          "Erreur de téléversement."
-      );
+      alert(error.response?.data?.message || "Erreur de téléversement.");
     } finally {
       setUploading(false);
       setProgress(0);
     }
   }
+  return <div className="space-y-5">
 
-  return (
-    <div className="space-y-5">
-
-      {!value?.url ? (
-        <button
-          type="button"
-          onClick={() => inputRef.current.click()}
-          className="flex h-44 w-full flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-300 hover:border-indigo-600"
-        >
+      {!value?.url ? <button type="button" onClick={() => inputRef.current.click()} className="flex h-44 w-full flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-300 hover:border-emerald-600">
           <FileText size={45} />
 
           <span className="mt-3 font-black">
@@ -67,9 +40,7 @@ export default function DocumentUploader({
             PDF • DOCX • ZIP
           </span>
 
-        </button>
-      ) : (
-        <div className="rounded-3xl border bg-white p-6">
+        </button> : <div className="rounded-3xl border bg-white p-6">
 
           <div className="flex items-center justify-between">
 
@@ -85,32 +56,20 @@ export default function DocumentUploader({
 
             </div>
 
-            <button
-              type="button"
-              onClick={() => onChange(null)}
-              className="rounded-xl bg-red-500 p-3 text-white"
-            >
+            <button type="button" onClick={() => onChange(null)} className="rounded-xl bg-red-500 p-3 text-white">
               <Trash2 size={18} />
             </button>
 
           </div>
 
-        </div>
-      )}
+        </div>}
 
-      <input
-        hidden
-        ref={inputRef}
-        type="file"
-        accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip"
-        onChange={handleSelect}
-      />
+      <input hidden ref={inputRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip" onChange={handleSelect} />
 
-      {uploading && (
-        <>
+      {uploading && <>
           <UploadProgress progress={progress} />
 
-          <div className="flex items-center gap-3 font-bold text-indigo-600">
+          <div className="flex items-center gap-3 font-bold text-emerald-600">
 
             <LoaderCircle className="animate-spin" />
 
@@ -118,9 +77,7 @@ export default function DocumentUploader({
 
           </div>
 
-        </>
-      )}
+        </>}
 
-    </div>
-  );
+    </div>;
 }

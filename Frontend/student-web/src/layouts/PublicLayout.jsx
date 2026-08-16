@@ -1,18 +1,13 @@
 import { Outlet } from "react-router";
-
 import Footer from "../components/layout/Footer";
 import Navbar from "../components/layout/Navbar";
-
 function PublicLayout() {
-  return (
-    <div className="min-h-screen bg-[#f7f8fc]">
+  return <div className="min-h-screen bg-[#fffbf5]">
       <Navbar />
 
       <Outlet />
 
       <Footer />
-    </div>
-  );
+    </div>;
 }
-
 export default PublicLayout;

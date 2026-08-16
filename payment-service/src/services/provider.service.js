@@ -1,9 +1,12 @@
-const { v4: uuidv4 } = require("uuid");
-async function createPaymentIntent({ provider, payment }) {
+const {
+  v4: uuidv4
+} = require("uuid");
+async function createPaymentIntent({
+  provider,
+  payment
+}) {
   if (provider !== "TEST") {
-    const e = new Error(
-      `Le fournisseur ${provider} n'est pas encore implémenté.`,
-    );
+    const e = new Error(`Le fournisseur ${provider} n'est pas encore implémenté.`);
     e.statusCode = 501;
     throw e;
   }
@@ -11,14 +14,19 @@ async function createPaymentIntent({ provider, payment }) {
     providerPaymentId: `test_${uuidv4()}`,
     checkoutUrl: null,
     clientSecret: null,
-    metadata: { simulated: true, paymentId: payment.id },
+    metadata: {
+      simulated: true,
+      paymentId: payment.id
+    }
   };
 }
-async function refundPayment({ provider, payment, amount }) {
+async function refundPayment({
+  provider,
+  payment,
+  amount
+}) {
   if (provider !== "TEST") {
-    const e = new Error(
-      `Le remboursement ${provider} n'est pas encore implémenté.`,
-    );
+    const e = new Error(`Le remboursement ${provider} n'est pas encore implémenté.`);
     e.statusCode = 501;
     throw e;
   }
@@ -26,7 +34,10 @@ async function refundPayment({ provider, payment, amount }) {
     providerRefundId: `test_refund_${uuidv4()}`,
     status: "SUCCEEDED",
     amount,
-    paymentId: payment.id,
+    paymentId: payment.id
   };
 }
-module.exports = { createPaymentIntent, refundPayment };
+module.exports = {
+  createPaymentIntent,
+  refundPayment
+};

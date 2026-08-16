@@ -3,77 +3,50 @@ const subscriptions = require("../services/subscription.service");
 const courses = require("../services/course.service");
 const provider = require("../services/provider.service");
 const progress = require("../services/progress.service");
-
 const {
   validateCreatePayment,
-  validateRefund,
+  validateRefund
 } = require("../utils/validators");
-
-const page = (query) => ({
+const page = query => ({
   page: Math.max(parseInt(query.page, 10) || 1, 1),
-  limit: Math.min(Math.max(parseInt(query.limit, 10) || 20, 1), 100),
+  limit: Math.min(Math.max(parseInt(query.limit, 10) || 20, 1), 100)
 });
-
-/**
- * Récupère les informations nécessaires à la création du paiement.
- */
 async function details(type, referenceId, userId, accessPlanId) {
   if (type === "INSTRUCTOR_MEMBERSHIP") {
     const subscription = await subscriptions.getSubscription(referenceId);
-
     if (String(subscription.instructorId) !== String(userId)) {
-      const error = new Error(
-        "Cette adhésion n'appartient pas à l'utilisateur.",
-      );
+      const error = new Error("Cette adhésion n'appartient pas à l'utilisateur.");
       error.statusCode = 403;
       throw error;
     }
-
     if (subscription.status !== "PENDING") {
-      const error = new Error(
-        "Seules les adhésions PENDING peuvent être payées.",
-      );
+      const error = new Error("Seules les adhésions PENDING peuvent être payées.");
       error.statusCode = 409;
       throw error;
     }
-
     return {
       countryCode: subscription.countryCode,
       currency: subscription.currency,
       amount: subscription.amount,
       metadata: {
         subscriptionId: subscription.id,
-        planCode: subscription.planCode,
-      },
+        planCode: subscription.planCode
+      }
     };
   }
-
   if (type === "COURSE_PURCHASE") {
     if (!accessPlanId) {
       const error = new Error("L'identifiant du plan d'accès est obligatoire.");
       error.statusCode = 400;
       throw error;
     }
-
     const course = await courses.getCourseForPayment(referenceId, accessPlanId);
-
     console.log("Détails du cours reçus par payment-service :", course);
-
-    if (
-      !course.courseId ||
-      !course.instructorId ||
-      course.amount === undefined ||
-      course.amount === null ||
-      !course.currency ||
-      !course.accessPlanId
-    ) {
-      const error = new Error(
-        "Les informations de paiement du cours sont incomplètes.",
-      );
+    if (!course.courseId || !course.instructorId || course.amount === undefined || course.amount === null || !course.currency || !course.accessPlanId) {
+      const error = new Error("Les informations de paiement du cours sont incomplètes.");
       error.statusCode = 502;
       throw error;
     }
-
     return {
       countryCode: course.countryCode,
       currency: course.currency,
@@ -85,198 +58,136 @@ async function details(type, referenceId, userId, accessPlanId) {
         accessPlanId: course.accessPlanId,
         planType: course.planType,
         durationMonths: course.durationMonths,
-        commissionRate: course.commissionRate,
-      },
+        commissionRate: course.commissionRate
+      }
     };
   }
-
   const error = new Error("Type de paiement non pris en charge.");
   error.statusCode = 400;
   throw error;
 }
-
-/**
- * GET /api/payments/instructor/analytics
- */
 exports.instructorAnalytics = async (req, res, next) => {
   try {
     const instructorId = req.user?.id;
-
     if (!instructorId) {
       return res.status(401).json({
-        message: "Utilisateur non authentifié.",
+        message: "Utilisateur non authentifié."
       });
     }
-
-    const months = Math.min(
-      Math.max(Number.parseInt(req.query.months, 10) || 6, 1),
-      24,
-    );
-
+    const months = Math.min(Math.max(Number.parseInt(req.query.months, 10) || 6, 1), 24);
     const analytics = await repo.getInstructorAnalytics(instructorId, months);
-
     return res.status(200).json(analytics);
   } catch (error) {
     next(error);
   }
 };
-
-/**
- * Créer un paiement.
- */
 exports.create = async (req, res, next) => {
   try {
     const validation = validateCreatePayment(req.body);
-
     if (!validation.valid) {
       return res.status(400).json({
         message: "Données invalides.",
-        errors: validation.errors,
+        errors: validation.errors
       });
     }
-
-    const paymentDetails = await details(
-      validation.value.paymentType,
-      validation.value.referenceId,
-      req.user.id,
-      validation.value.accessPlanId,
-    );
-
+    const paymentDetails = await details(validation.value.paymentType, validation.value.referenceId, req.user.id, validation.value.accessPlanId);
     const result = await repo.createPayment({
       userId: req.user.id,
       ...validation.value,
-      ...paymentDetails,
+      ...paymentDetails
     });
-
     if (!result.created) {
       return res.status(200).json({
         message: "Paiement déjà créé pour cette clé d'idempotence.",
         payment: result.payment,
-        created: false,
+        created: false
       });
     }
-
     const intent = await provider.createPaymentIntent({
       provider: validation.value.provider,
-      payment: result.payment,
+      payment: result.payment
     });
-
-    const payment = await repo.setProviderPayment(
-      result.payment.id,
-      intent.providerPaymentId,
-      intent.metadata,
-    );
-
+    const payment = await repo.setProviderPayment(result.payment.id, intent.providerPaymentId, intent.metadata);
     return res.status(201).json({
       message: "Paiement créé.",
       payment,
       provider: {
         checkoutUrl: intent.checkoutUrl,
-        clientSecret: intent.clientSecret,
+        clientSecret: intent.clientSecret
       },
-      created: true,
+      created: true
     });
   } catch (error) {
     next(error);
   }
 };
-
-/**
- * Récupérer les paiements de l'utilisateur connecté.
- */
 exports.getMine = async (req, res, next) => {
   try {
     const pagination = page(req.query);
-
     const result = await repo.listForUser(req.user.id, pagination);
-
     return res.json({
       ...result,
       ...pagination,
-      totalPages: Math.ceil(result.total / pagination.limit),
+      totalPages: Math.ceil(result.total / pagination.limit)
     });
   } catch (error) {
     next(error);
   }
 };
-
-/**
- * Récupérer un paiement appartenant à l'utilisateur.
- */
 exports.getOne = async (req, res, next) => {
   try {
     const payment = await repo.findByIdForUser(req.params.id, req.user.id);
-
     if (!payment) {
       return res.status(404).json({
-        message: "Paiement introuvable.",
+        message: "Paiement introuvable."
       });
     }
-
     const events = await repo.listEvents(payment.id);
-
     return res.json({
       payment,
-      events,
+      events
     });
   } catch (error) {
     next(error);
   }
 };
-
-/**
- * Annuler un paiement.
- */
 exports.cancel = async (req, res, next) => {
   try {
-    const existingPayment = await repo.findByIdForUser(
-      req.params.id,
-      req.user.id,
-    );
-
+    const existingPayment = await repo.findByIdForUser(req.params.id, req.user.id);
     if (!existingPayment) {
       return res.status(404).json({
-        message: "Paiement introuvable.",
+        message: "Paiement introuvable."
       });
     }
-
     const payment = await repo.transitionStatus({
       paymentId: existingPayment.id,
       allowedStatuses: ["PENDING", "PROCESSING"],
       newStatus: "CANCELLED",
       eventType: "CANCELLED",
       message: "Paiement annulé par l'utilisateur.",
-      cancelledAt: new Date(),
+      cancelledAt: new Date()
     });
-
     return res.json({
       message: "Paiement annulé.",
-      payment,
+      payment
     });
   } catch (error) {
     next(error);
   }
 };
-
-/**
- * Simuler la réussite d'un paiement TEST.
- */
 exports.testSuccess = async (req, res, next) => {
   try {
     const existingPayment = await repo.findById(req.params.id);
-
     if (!existingPayment) {
       return res.status(404).json({
-        message: "Paiement introuvable.",
+        message: "Paiement introuvable."
       });
     }
-
     if (existingPayment.provider !== "TEST") {
       return res.status(409).json({
-        message: "Route réservée aux paiements TEST.",
+        message: "Route réservée aux paiements TEST."
       });
     }
-
     const payment = await repo.transitionStatus({
       paymentId: existingPayment.id,
       allowedStatuses: ["PENDING", "PROCESSING"],
@@ -285,121 +196,55 @@ exports.testSuccess = async (req, res, next) => {
       message: "Paiement de test réussi.",
       paidAt: new Date(),
       payload: {
-        simulated: true,
-      },
+        simulated: true
+      }
     });
-
     if (payment.paymentType === "INSTRUCTOR_MEMBERSHIP") {
       await subscriptions.activateSubscription(payment.referenceId, payment.id);
     }
-
     if (payment.paymentType === "COURSE_PURCHASE") {
       const accessPlanId = payment.metadata?.accessPlanId;
-
       if (!accessPlanId) {
-        const error = new Error(
-          "Le plan d'accès est absent des métadonnées du paiement.",
-        );
+        const error = new Error("Le plan d'accès est absent des métadonnées du paiement.");
         error.statusCode = 500;
         throw error;
       }
-
       await courses.grantCourseAccess({
         courseId: payment.referenceId,
         studentId: payment.userId,
         paymentId: payment.id,
-        accessPlanId,
+        accessPlanId
       });
-
       await progress.createEnrollment({
         studentId: payment.userId,
         courseId: payment.referenceId,
-        courseTitle: payment.metadata?.courseTitle || "Cours EduSmart",
+        courseTitle: payment.metadata?.courseTitle || "Cours EduSmart"
       });
-
       await repo.markCourseAccessGranted(payment.id);
     }
     return res.json({
       message: "Paiement de test confirmé.",
-      payment,
+      payment
     });
   } catch (error) {
     next(error);
   }
 };
-
-exports.internalEnroll = async (req, res) => {
-  try {
-    const { studentId, courseId, courseTitle } = req.body;
-
-    if (!studentId || !courseId || !courseTitle) {
-      return res.status(400).json({
-        message: "studentId, courseId et courseTitle sont obligatoires.",
-      });
-    }
-
-    const result = await pool.query(
-      `
-        INSERT INTO progress_service.enrollments (
-          user_id,
-          course_id,
-          course_title,
-          status,
-          progress_percentage,
-          started_at,
-          updated_at
-        )
-        VALUES (
-          $1,
-          $2,
-          $3,
-          'IN_PROGRESS',
-          0,
-          CURRENT_TIMESTAMP,
-          CURRENT_TIMESTAMP
-        )
-        ON CONFLICT (user_id, course_id)
-        DO UPDATE SET
-          course_title = EXCLUDED.course_title,
-          updated_at = CURRENT_TIMESTAMP
-        RETURNING *
-      `,
-      [studentId, String(courseId), String(courseTitle)],
-    );
-
-    return res.status(201).json({
-      message: "Inscription interne créée.",
-      enrollment: result.rows[0],
-    });
-  } catch (error) {
-    return sendError(res, error);
-  }
-};
-/**
- * Simuler l'échec d'un paiement TEST.
- */
 exports.testFailure = async (req, res, next) => {
   try {
     const existingPayment = await repo.findById(req.params.id);
-
     if (!existingPayment) {
       return res.status(404).json({
-        message: "Paiement introuvable.",
+        message: "Paiement introuvable."
       });
     }
-
     if (existingPayment.provider !== "TEST") {
       return res.status(409).json({
-        message: "Route réservée aux paiements TEST.",
+        message: "Route réservée aux paiements TEST."
       });
     }
-
     const failureCode = String(req.body.failureCode || "TEST_FAILURE");
-
-    const failureMessage = String(
-      req.body.failureMessage || "Paiement de test échoué.",
-    );
-
+    const failureMessage = String(req.body.failureMessage || "Paiement de test échoué.");
     const payment = await repo.transitionStatus({
       paymentId: existingPayment.id,
       allowedStatuses: ["PENDING", "PROCESSING"],
@@ -409,135 +254,99 @@ exports.testFailure = async (req, res, next) => {
       failureCode,
       failureMessage,
       payload: {
-        simulated: true,
-      },
+        simulated: true
+      }
     });
-
     if (payment.paymentType === "INSTRUCTOR_MEMBERSHIP") {
-      await subscriptions.markSubscriptionPaymentFailed(
-        payment.referenceId,
-        failureCode,
-        failureMessage,
-      );
+      await subscriptions.markSubscriptionPaymentFailed(payment.referenceId, failureCode, failureMessage);
     }
-
     return res.json({
       message: "Échec simulé.",
-      payment,
+      payment
     });
   } catch (error) {
     next(error);
   }
 };
-
-/**
- * Liste administrative des paiements.
- */
 exports.adminList = async (req, res, next) => {
   try {
     const pagination = page(req.query);
-
     const result = await repo.listAll({
       ...pagination,
       status: req.query.status,
-      paymentType: req.query.paymentType,
+      paymentType: req.query.paymentType
     });
-
     return res.json({
       ...result,
       ...pagination,
-      totalPages: Math.ceil(result.total / pagination.limit),
+      totalPages: Math.ceil(result.total / pagination.limit)
     });
   } catch (error) {
     next(error);
   }
 };
-
-/**
- * Récupérer un paiement pour l'administration.
- */
 exports.adminGetOne = async (req, res, next) => {
   try {
     const payment = await repo.findById(req.params.id);
-
     if (!payment) {
       return res.status(404).json({
-        message: "Paiement introuvable.",
+        message: "Paiement introuvable."
       });
     }
-
     const events = await repo.listEvents(payment.id);
-
     return res.json({
       payment,
-      events,
+      events
     });
   } catch (error) {
     next(error);
   }
 };
-
-/**
- * Rembourser un paiement.
- */
 exports.refund = async (req, res, next) => {
   try {
     const payment = await repo.findById(req.params.id);
-
     if (!payment) {
       return res.status(404).json({
-        message: "Paiement introuvable.",
+        message: "Paiement introuvable."
       });
     }
-
     if (!["SUCCEEDED", "PARTIALLY_REFUNDED"].includes(payment.status)) {
       return res.status(409).json({
-        message: "Ce paiement ne peut pas être remboursé.",
+        message: "Ce paiement ne peut pas être remboursé."
       });
     }
-
     const validation = validateRefund(req.body, payment);
-
     if (!validation.valid) {
       return res.status(400).json({
         message: "Données invalides.",
-        errors: validation.errors,
+        errors: validation.errors
       });
     }
-
     const providerRefund = await provider.refundPayment({
       provider: payment.provider,
       payment,
-      amount: validation.value.amount,
+      amount: validation.value.amount
     });
-
     const result = await repo.createRefund({
       payment,
       requestedBy: req.user.id,
       amount: validation.value.amount,
       reason: validation.value.reason,
       providerRefundId: providerRefund.providerRefundId,
-      status: providerRefund.status,
+      status: providerRefund.status
     });
-
     return res.json({
       message: "Remboursement traité.",
-      ...result,
+      ...result
     });
   } catch (error) {
     next(error);
   }
 };
-
 exports.adminSummary = async (req, res, next) => {
   try {
-    const months = Math.min(
-      Math.max(parseInt(req.query.months || "6", 10), 1),
-      24,
-    );
-
+    const months = Math.min(Math.max(parseInt(req.query.months || "6", 10), 1), 24);
     const analytics = await repo.getGlobalAnalytics(months);
-
     return res.json(analytics);
   } catch (error) {
     next(error);

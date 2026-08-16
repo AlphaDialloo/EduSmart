@@ -1,38 +1,25 @@
-import {
-  ArrowLeft,
-  ShoppingBag,
-  Trash2,
-} from "lucide-react";
+import { ArrowLeft, ShoppingBag, Trash2 } from "lucide-react";
 import { Link } from "react-router";
-
 import { useCart } from "../../contexts/CartContext";
-
 function formatPrice(price, currency = "CAD") {
   return new Intl.NumberFormat("fr-CA", {
     style: "currency",
-    currency,
+    currency
   }).format(Number(price || 0));
 }
-
 function CartPage() {
   const {
     items,
     itemCount,
     total,
     removeFromCart,
-    clearCart,
+    clearCart
   } = useCart();
-
   const currency = items[0]?.currency || "CAD";
-
   if (itemCount === 0) {
-    return (
-      <main className="mx-auto min-h-[70vh] max-w-4xl px-5 py-16">
+    return <main className="mx-auto min-h-[70vh] max-w-4xl px-5 py-16">
         <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center shadow-sm">
-          <ShoppingBag
-            size={50}
-            className="mx-auto text-indigo-600"
-          />
+          <ShoppingBag size={50} className="mx-auto text-emerald-600" />
 
           <h1 className="mt-5 text-3xl font-black text-slate-950">
             Votre panier est vide
@@ -42,25 +29,16 @@ function CartPage() {
             Explorez le catalogue et choisissez un plan de cours.
           </p>
 
-          <Link
-            to="/courses"
-            className="mt-7 inline-flex rounded-2xl bg-indigo-600 px-6 py-4 font-black text-white"
-          >
+          <Link to="/courses" className="mt-7 inline-flex rounded-2xl bg-emerald-600 px-6 py-4 font-black text-white">
             Explorer les cours
           </Link>
         </div>
-      </main>
-    );
+      </main>;
   }
-
-  return (
-    <main className="mx-auto max-w-7xl px-5 py-12 lg:px-8">
+  return <main className="mx-auto max-w-7xl px-5 py-12 lg:px-8">
       <div className="flex flex-wrap items-end justify-between gap-5">
         <div>
-          <Link
-            to="/courses"
-            className="inline-flex items-center gap-2 text-sm font-bold text-indigo-600"
-          >
+          <Link to="/courses" className="inline-flex items-center gap-2 text-sm font-bold text-emerald-600">
             <ArrowLeft size={17} />
             Continuer mes achats
           </Link>
@@ -75,30 +53,18 @@ function CartPage() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={clearCart}
-          className="rounded-xl border border-red-200 px-4 py-2.5 text-sm font-bold text-red-600 hover:bg-red-50"
-        >
+        <button type="button" onClick={clearCart} className="rounded-xl border border-red-200 px-4 py-2.5 text-sm font-bold text-red-600 hover:bg-red-50">
           Vider le panier
         </button>
       </div>
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
         <section className="space-y-4">
-          {items.map((item) => (
-            <article
-              key={item.cartItemId}
-              className="flex flex-col gap-5 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row"
-            >
-              <img
-                src={item.image}
-                alt={item.imageAlt || item.title}
-                className="h-40 w-full rounded-2xl object-cover sm:w-56"
-              />
+          {items.map(item => <article key={item.cartItemId} className="flex flex-col gap-5 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row">
+              <img src={item.image} alt={item.imageAlt || item.title} className="h-40 w-full rounded-2xl object-cover sm:w-56" />
 
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-black uppercase tracking-wide text-indigo-600">
+                <p className="text-xs font-black uppercase tracking-wide text-emerald-600">
                   {item.category}
                 </p>
 
@@ -125,20 +91,13 @@ function CartPage() {
                     {formatPrice(item.price, item.currency)}
                   </p>
 
-                  <button
-                    type="button"
-                    onClick={() =>
-                      removeFromCart(item.courseId)
-                    }
-                    className="inline-flex items-center gap-2 text-sm font-bold text-red-600"
-                  >
+                  <button type="button" onClick={() => removeFromCart(item.courseId)} className="inline-flex items-center gap-2 text-sm font-bold text-red-600">
                     <Trash2 size={17} />
                     Retirer
                   </button>
                 </div>
               </div>
-            </article>
-          ))}
+            </article>)}
         </section>
 
         <aside className="lg:sticky lg:top-24 lg:self-start">
@@ -171,17 +130,12 @@ function CartPage() {
               </div>
             </div>
 
-            <Link
-              to="/checkout"
-              className="mt-6 flex w-full items-center justify-center rounded-2xl bg-indigo-600 px-6 py-4 font-black text-white"
-            >
+            <Link to="/checkout" className="mt-6 flex w-full items-center justify-center rounded-2xl bg-emerald-600 px-6 py-4 font-black text-white">
               Continuer vers le paiement
             </Link>
           </div>
         </aside>
       </div>
-    </main>
-  );
+    </main>;
 }
-
 export default CartPage;

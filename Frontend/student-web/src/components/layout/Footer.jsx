@@ -1,13 +1,11 @@
 import { BookOpen } from "lucide-react";
 import { Link } from "react-router";
-
 function Footer() {
-  return (
-    <footer className="mt-14 bg-slate-950 text-white">
+  return <footer className="mt-14 bg-slate-950 text-white">
       <div className="mx-auto grid max-w-7xl gap-10 px-5 py-14 md:grid-cols-4 lg:px-8">
         <div className="md:col-span-2">
           <Link to="/" className="inline-flex items-center gap-3">
-            <div className="flex size-11 items-center justify-center rounded-2xl bg-indigo-600">
+            <div className="flex size-11 items-center justify-center rounded-2xl bg-emerald-600">
               <BookOpen size={22} />
             </div>
 
@@ -62,8 +60,6 @@ function Footer() {
           © {new Date().getFullYear()} EduSmart. Tous droits réservés.
         </div>
       </div>
-    </footer>
-  );
+    </footer>;
 }
-
 export default Footer;

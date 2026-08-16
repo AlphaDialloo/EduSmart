@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: edusmart-config
+data:
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_NAME: edusmart_db
+  DB_USER: edusmart
+  MONGO_URI: mongodb://mongo:27017/edusmart_courses
+  AUTH_SERVICE_URL: http://auth-service:4001
+  USER_SERVICE_URL: http://user-service:4002
+  COURSE_SERVICE_URL: http://course-service:4003
+  PROGRESS_SERVICE_URL: http://progress-service:4004
+  RECOMMENDATION_SERVICE_URL: http://recommendation-service:4005
+  INTERACTION_SERVICE_URL: http://interaction-service:4006
+  SETTINGS_SERVICE_URL: http://settings-service:4007
+  SUBSCRIPTION_SERVICE_URL: http://subscription-service:4008
+  PAYMENT_SERVICE_URL: http://payment-service:4009
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: edusmart-secrets
+type: Opaque
+stringData:
+  DB_PASSWORD: change-me-before-deployment
+  DATABASE_URL: postgresql://edusmart:change-me-before-deployment@postgres:5432/edusmart_db
+  JWT_SECRET: change-me-before-deployment
+  INTERNAL_SERVICE_SECRET: change-me-before-deployment

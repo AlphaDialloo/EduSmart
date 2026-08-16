@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: edusmart
+resources:
+  - namespace.yaml
+  - config.yaml
+  - data.yaml
+  - services.yaml
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: edusmart
+configMapGenerator:
+  - name: postgres-init
+    files:
+      - init.sql=../../database/postgres/init.sql

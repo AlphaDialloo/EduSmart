@@ -1,39 +1,35 @@
 const jwt = require("jsonwebtoken");
 function authenticate(req, res, next) {
   const header = req.headers.authorization;
-  if (!header || !header.startsWith("Bearer "))
-    return res.status(401).json({ message: "Token manquant" });
+  if (!header || !header.startsWith("Bearer ")) return res.status(401).json({
+    message: "Token manquant"
+  });
   try {
-    req.user = jwt.verify(
-      header.split(" ")[1],
-      process.env.JWT_SECRET || "edusmart_secret_key",
-    );
+    req.user = jwt.verify(header.split(" ")[1], process.env.JWT_SECRET);
     next();
   } catch {
-    return res.status(401).json({ message: "Token invalide" });
+    return res.status(401).json({
+      message: "Token invalide"
+    });
   }
 }
 function authorize(...roles) {
-  return (req, res, next) =>
-    !req.user || !roles.includes(req.user.role)
-      ? res.status(403).json({ message: "Accès refusé" })
-      : next();
+  return (req, res, next) => !req.user || !roles.includes(req.user.role) ? res.status(403).json({
+    message: "Accès refusé"
+  }) : next();
 }
-
 function authenticateInternal(req, res, next) {
   console.log("Secret reçu :", req.headers["x-internal-secret"]);
-
   console.log("Secret attendu :", process.env.INTERNAL_SERVICE_SECRET);
-
-  if (
-    !process.env.INTERNAL_SERVICE_SECRET ||
-    req.headers["x-internal-secret"] !== process.env.INTERNAL_SERVICE_SECRET
-  ) {
+  if (!process.env.INTERNAL_SERVICE_SECRET || req.headers["x-internal-secret"] !== process.env.INTERNAL_SERVICE_SECRET) {
     return res.status(401).json({
-      message: "Authentification interne invalide.",
+      message: "Authentification interne invalide."
     });
   }
-
   next();
 }
-module.exports = { authenticate, authorize, authenticateInternal };
+module.exports = {
+  authenticate,
+  authorize,
+  authenticateInternal
+};
