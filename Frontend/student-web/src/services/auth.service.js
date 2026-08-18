@@ -1,5 +1,6 @@
 import axios from "axios";
-const AUTH_API_URL = import.meta.env.VITE_AUTH_API_URL || "http://localhost:3000/api/auth";
+import { getApiUrl } from "./apiUrl";
+const AUTH_API_URL = import.meta.env.VITE_AUTH_API_URL || getApiUrl("auth");
 const authApi = axios.create({
   baseURL: AUTH_API_URL,
   timeout: 15000

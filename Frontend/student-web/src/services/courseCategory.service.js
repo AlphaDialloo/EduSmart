@@ -1,6 +1,7 @@
 import axios from "axios";
+import { getApiUrl } from "./apiUrl";
 const api = axios.create({
-  baseURL: import.meta.env.VITE_CATEGORY_API_URL || "http://localhost:3000/api/course-categories",
+  baseURL: import.meta.env.VITE_CATEGORY_API_URL || getApiUrl("course-categories"),
   timeout: 15000
 });
 const auth = token => ({

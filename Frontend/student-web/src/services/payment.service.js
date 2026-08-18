@@ -1,5 +1,6 @@
 import axios from "axios";
-const PAYMENT_API_URL = import.meta.env.VITE_PAYMENT_API_URL || "http://localhost:3000/api/payments";
+import { getApiUrl } from "./apiUrl";
+const PAYMENT_API_URL = import.meta.env.VITE_PAYMENT_API_URL || getApiUrl("payments");
 const paymentApi = axios.create({
   baseURL: PAYMENT_API_URL,
   timeout: 20000

@@ -1,5 +1,6 @@
 import axios from "axios";
-const UPLOAD_API_URL = import.meta.env.VITE_UPLOAD_API_URL || "http://localhost:3000/api/uploads";
+import { getApiUrl } from "./apiUrl";
+const UPLOAD_API_URL = import.meta.env.VITE_UPLOAD_API_URL || getApiUrl("uploads");
 const uploadApi = axios.create({
   baseURL: UPLOAD_API_URL,
   timeout: 300000

@@ -1,7 +1,8 @@
 import axios from "axios";
-const USER_API_URL = import.meta.env.VITE_USER_API_URL || "http://localhost:3000/api/users";
-const COURSE_API_URL = import.meta.env.VITE_COURSE_API_URL || "http://localhost:3000/api/courses";
-const PAYMENT_API_URL = import.meta.env.VITE_PAYMENT_API_URL || "http://localhost:3000/api/payments";
+import { getApiUrl } from "./apiUrl";
+const USER_API_URL = import.meta.env.VITE_USER_API_URL || getApiUrl("users");
+const COURSE_API_URL = import.meta.env.VITE_COURSE_API_URL || getApiUrl("courses");
+const PAYMENT_API_URL = import.meta.env.VITE_PAYMENT_API_URL || getApiUrl("payments");
 const userApi = axios.create({
   baseURL: USER_API_URL,
   timeout: 15000

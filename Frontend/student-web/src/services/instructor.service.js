@@ -1,6 +1,7 @@
 import axios from "axios";
-const COURSE_API_URL = import.meta.env.VITE_COURSE_API_URL || "http://localhost:3000/api/courses";
-const PAYMENT_API_URL = import.meta.env.VITE_PAYMENT_API_URL || "http://localhost:3000/api/payments";
+import { getApiUrl } from "./apiUrl";
+const COURSE_API_URL = import.meta.env.VITE_COURSE_API_URL || getApiUrl("courses");
+const PAYMENT_API_URL = import.meta.env.VITE_PAYMENT_API_URL || getApiUrl("payments");
 const instructorApi = axios.create({
   baseURL: COURSE_API_URL,
   timeout: 20000

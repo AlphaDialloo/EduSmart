@@ -1,5 +1,6 @@
 import axios from "axios";
-const PROGRESS_API_URL = import.meta.env.VITE_PROGRESS_API_URL || "http://localhost:3000/api/progress";
+import { getApiUrl } from "./apiUrl";
+const PROGRESS_API_URL = import.meta.env.VITE_PROGRESS_API_URL || getApiUrl("progress");
 const progressApi = axios.create({
   baseURL: PROGRESS_API_URL,
   timeout: 15000
