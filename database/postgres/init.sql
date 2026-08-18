@@ -811,7 +811,7 @@ CREATE TABLE IF NOT EXISTS payment_service.course_purchases (
 
     student_id UUID NOT NULL,
 
-    course_id UUID NOT NULL,
+    course_id VARCHAR(100) NOT NULL,
 
     access_status VARCHAR(30) NOT NULL DEFAULT 'PENDING',
 
