@@ -3,7 +3,7 @@ import { getApiUrl } from "./apiUrl";
 const COURSE_API_URL = import.meta.env.VITE_COURSE_API_URL || getApiUrl("courses");
 const courseApi = axios.create({
   baseURL: COURSE_API_URL,
-  timeout: 15000
+  timeout: 70000
 });
 function getLowestActivePlan(course) {
   const plans = Array.isArray(course?.pricing?.accessPlans) ? course.pricing.accessPlans.filter(plan => plan?.isActive !== false) : [];

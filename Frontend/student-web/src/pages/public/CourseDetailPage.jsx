@@ -37,7 +37,7 @@ function CourseDetailPage() {
       } catch (requestError) {
         console.error("Erreur de chargement du cours :", requestError);
         if (active) {
-          setError(requestError.response?.data?.message || requestError.message || "Impossible de charger ce cours.");
+          setError(requestError.code === "ECONNABORTED" ? "Le serveur met du temps à démarrer. Actualisez la page dans quelques secondes." : requestError.response?.data?.message || requestError.message || "Impossible de charger ce cours.");
         }
       } finally {
         if (active) {
@@ -109,7 +109,7 @@ function CourseDetailPage() {
         navigate("/student/courses");
       }, 700);
     } catch (requestError) {
-      setError(requestError.response?.data?.message || requestError.message || "Impossible de vous inscrire gratuitement à ce cours.");
+      setError(requestError.code === "ECONNABORTED" ? "Le serveur met du temps à démarrer. Réessayez dans quelques secondes." : requestError.response?.data?.message || requestError.message || "Impossible de vous inscrire gratuitement à ce cours.");
     } finally {
       setFreeEnrollmentLoading(false);
     }
