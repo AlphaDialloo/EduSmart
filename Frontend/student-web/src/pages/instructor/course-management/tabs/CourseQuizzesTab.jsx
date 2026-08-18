@@ -49,7 +49,7 @@ export default function CourseQuizzesTab({
         <h2 className="text-2xl font-black">Créer un quiz</h2>
         <p className="mt-2 text-sm text-slate-500">Version rapide avec une première question. Vous pourrez ensuite le modifier.</p>
         <div className="mt-6 space-y-4">
-          <label className="block text-sm font-bold">Titre<input required value={form.title} onChange={e => setForm(c => ({
+          <label className="block text-sm font-bold">Titre<input required minLength={2} maxLength={255} value={form.title} onChange={e => setForm(c => ({
             ...c,
             title: e.target.value
           }))} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3" /></label>
@@ -57,22 +57,22 @@ export default function CourseQuizzesTab({
             ...c,
             moduleId: e.target.value
           }))} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"><option value="">Sélectionner</option>{(course?.modules || []).map(module => <option key={module._id} value={module._id}>{module.title}</option>)}</select></label>
-          <div className="grid grid-cols-2 gap-4"><label className="text-sm font-bold">Score requis<input type="number" min="0" max="100" value={form.passingScore} onChange={e => setForm(c => ({
+          <div className="grid grid-cols-2 gap-4"><label className="text-sm font-bold">Score requis<input required type="number" min="0" max="100" value={form.passingScore} onChange={e => setForm(c => ({
               ...c,
               passingScore: e.target.value
-            }))} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3" /></label><label className="text-sm font-bold">Tentatives<input type="number" min="1" value={form.maxAttempts} onChange={e => setForm(c => ({
+            }))} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3" /></label><label className="text-sm font-bold">Tentatives<input required type="number" min="1" max="20" value={form.maxAttempts} onChange={e => setForm(c => ({
               ...c,
               maxAttempts: e.target.value
             }))} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3" /></label></div>
-          <label className="block text-sm font-bold">Question<input required value={form.question} onChange={e => setForm(c => ({
+          <label className="block text-sm font-bold">Question<input required minLength={2} maxLength={1000} value={form.question} onChange={e => setForm(c => ({
             ...c,
             question: e.target.value
           }))} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3" /></label>
-          <label className="block text-sm font-bold">Option A<input required value={form.optionA} onChange={e => setForm(c => ({
+          <label className="block text-sm font-bold">Option A<input required maxLength={500} value={form.optionA} onChange={e => setForm(c => ({
             ...c,
             optionA: e.target.value
           }))} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3" /></label>
-          <label className="block text-sm font-bold">Option B<input required value={form.optionB} onChange={e => setForm(c => ({
+          <label className="block text-sm font-bold">Option B<input required maxLength={500} value={form.optionB} onChange={e => setForm(c => ({
             ...c,
             optionB: e.target.value
           }))} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3" /></label>

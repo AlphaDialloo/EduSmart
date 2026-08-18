@@ -76,7 +76,8 @@ function InstructorCourseManagementPage() {
       setMessage(successMessage);
       await load();
     } catch (requestError) {
-      setError(requestError.response?.data?.message || requestError.response?.data?.errors?.join(" ") || requestError.message || "Action impossible.");
+      const validationErrors = requestError.response?.data?.errors;
+      setError(Array.isArray(validationErrors) && validationErrors.length ? validationErrors.join(" ") : requestError.response?.data?.message || requestError.message || "Action impossible.");
     } finally {
       setBusy(false);
     }
