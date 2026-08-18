@@ -6,5 +6,8 @@ module.exports = new Pool({
   port: process.env.DB_PORT || 5432,
   database: process.env.DB_NAME || 'edusmart_db',
   user: process.env.DB_USER || 'edusmart',
-  password: process.env.DB_PASSWORD || 'edusmart'
+  password: process.env.DB_PASSWORD || 'edusmart',
+  ssl: process.env.NODE_ENV === 'production' ? {
+    rejectUnauthorized: false
+  } : undefined
 });
