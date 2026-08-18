@@ -91,7 +91,8 @@ function InstructorCreateCoursePage() {
         replace: true
       });
     } catch (requestError) {
-      setError(requestError.response?.data?.message || requestError.response?.data?.errors?.join(" ") || requestError.message || "Impossible de créer le cours.");
+      const validationErrors = requestError.response?.data?.errors;
+      setError(Array.isArray(validationErrors) && validationErrors.length ? validationErrors.join(" ") : requestError.response?.data?.message || requestError.message || "Impossible de créer le cours.");
     } finally {
       setSaving(false);
     }
@@ -129,7 +130,7 @@ function InstructorCreateCoursePage() {
               <div className="mt-6 grid gap-5 sm:grid-cols-2">
                 <label className="sm:col-span-2 text-sm font-bold text-slate-700">
                   Titre
-                  <input required name="title" value={form.title} onChange={change} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3.5 outline-none focus:border-emerald-500" />
+                  <input required minLength={3} maxLength={255} name="title" value={form.title} onChange={change} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3.5 outline-none focus:border-emerald-500" />
                 </label>
 
                 <label className="sm:col-span-2 text-sm font-bold text-slate-700">
