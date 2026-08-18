@@ -3,7 +3,7 @@ import { getApiUrl } from "./apiUrl";
 const PROGRESS_API_URL = import.meta.env.VITE_PROGRESS_API_URL || getApiUrl("progress");
 const progressApi = axios.create({
   baseURL: PROGRESS_API_URL,
-  timeout: 15000
+  timeout: 70000
 });
 function getAuthConfig(token) {
   if (!token) {
@@ -22,6 +22,13 @@ export async function getStudentDashboard(token) {
 }
 export async function getMyEnrollments(token) {
   const response = await progressApi.get("/enrollments/me", getAuthConfig(token));
+  return response.data;
+}
+export async function createProgressEnrollment(token, courseId, courseTitle) {
+  const response = await progressApi.post("/enrollments", {
+    courseId,
+    courseTitle
+  }, getAuthConfig(token));
   return response.data;
 }
 export async function getEnrollmentProgress(token, enrollmentId) {

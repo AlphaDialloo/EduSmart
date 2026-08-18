@@ -4,7 +4,7 @@ import { useParams } from "react-router";
 import Navbar from "../../components/layout/Navbar";
 import { useAuth } from "../../contexts/AuthContext";
 import { getStudentCourseById, getStudentQuiz, submitCourseQuiz } from "../../services/course.service";
-import { addLearningTime, getEnrollmentProgress, getLearningReflections, getMyEnrollments, saveLearningReflection, saveResourceProgress } from "../../services/progress.service";
+import { addLearningTime, createProgressEnrollment, getEnrollmentProgress, getLearningReflections, getMyEnrollments, saveLearningReflection, saveResourceProgress } from "../../services/progress.service";
 function getResourceIcon(type) {
   switch (type) {
     case "VIDEO":
@@ -74,7 +74,11 @@ function StudentCoursePlayerPage() {
           return;
         }
         const enrollments = enrollmentsResponse?.enrollments || [];
-        const progressEnrollment = enrollments.find(enrollment => String(enrollment.course_id) === String(courseId));
+        let progressEnrollment = enrollments.find(enrollment => String(enrollment.course_id) === String(courseId));
+        if (!progressEnrollment || !isUuid(progressEnrollment.id)) {
+          const enrollmentResponse = await createProgressEnrollment(token, courseId, courseResponse.title);
+          progressEnrollment = enrollmentResponse?.enrollment;
+        }
         if (progressEnrollment && isUuid(progressEnrollment.id)) {
           setEnrollmentId(progressEnrollment.id);
           setOverallProgress(clampProgress(progressEnrollment.progress_percentage));
