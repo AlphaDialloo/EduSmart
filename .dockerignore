@@ -1,0 +1,12 @@
+.git
+.github
+.vscode
+**/.env
+**/node_modules
+**/coverage
+**/dist
+Frontend
+docs
+k8s
+database
+*.log

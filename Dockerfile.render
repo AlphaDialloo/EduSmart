@@ -1,0 +1,35 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY api-gateway/package*.json ./api-gateway/
+COPY auth-service/package*.json ./auth-service/
+COPY user-service/package*.json ./user-service/
+COPY course-service/package*.json ./course-service/
+COPY progress-service/package*.json ./progress-service/
+COPY recommendation-service/package*.json ./recommendation-service/
+COPY interaction-service/package*.json ./interaction-service/
+COPY settings-service/package*.json ./settings-service/
+COPY subscription-service/package*.json ./subscription-service/
+COPY payment-service/package*.json ./payment-service/
+
+RUN for service in api-gateway auth-service user-service course-service progress-service recommendation-service interaction-service settings-service subscription-service payment-service; do \
+      npm ci --omit=dev --prefix "/app/$service"; \
+    done
+
+COPY api-gateway ./api-gateway
+COPY auth-service ./auth-service
+COPY user-service ./user-service
+COPY course-service ./course-service
+COPY progress-service ./progress-service
+COPY recommendation-service ./recommendation-service
+COPY interaction-service ./interaction-service
+COPY settings-service ./settings-service
+COPY subscription-service ./subscription-service
+COPY payment-service ./payment-service
+COPY scripts/start-render.js ./scripts/start-render.js
+
+ENV NODE_ENV=production
+EXPOSE 10000
+
+CMD ["node", "scripts/start-render.js"]
