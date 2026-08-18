@@ -8,6 +8,20 @@ function authHeaders(req) {
     Authorization: req.headers.authorization
   };
 }
+async function optionalGet(url, req, fallback) {
+  try {
+    return await axios.get(url, {
+      headers: authHeaders(req)
+    });
+  } catch (error) {
+    if (error.response?.status === 404) {
+      return {
+        data: fallback
+      };
+    }
+    throw error;
+  }
+}
 function sendError(res, error) {
   console.error("Recommendation controller error:", error.response?.data || error.message);
   if (error.response) {
@@ -41,19 +55,15 @@ exports.generate = async (req, res) => {
   try {
     const requestedLimit = Number(req.body?.limit);
     const limit = Number.isInteger(requestedLimit) && requestedLimit >= 1 && requestedLimit <= 20 ? requestedLimit : 3;
-    const [profileResponse, attemptsResponse, coursesResponse, enrollmentsResponse] = await Promise.all([axios.get(`${process.env.USER_SERVICE_URL}/api/users/profile`, {
-      headers: authHeaders(req)
-    }), axios.get(`${process.env.PROGRESS_SERVICE_URL}/progress/quizzes`, {
-      headers: authHeaders(req)
+    const [profileResponse, attemptsResponse, coursesResponse, enrollmentsResponse] = await Promise.all([optionalGet(`${process.env.USER_SERVICE_URL}/api/users/profile`, req, {
+      studentProfile: null
+    }), optionalGet(`${process.env.PROGRESS_SERVICE_URL}/progress/quizzes`, req, {
+      attempts: []
     }), axios.get(`${process.env.COURSE_SERVICE_URL}/api/courses`, {
       headers: authHeaders(req)
-    }), axios.get(`${process.env.PROGRESS_SERVICE_URL}/progress/enrollments/me`, {
-      headers: authHeaders(req)
-    }).catch(() => ({
-      data: {
-        enrollments: []
-      }
-    }))]);
+    }), optionalGet(`${process.env.PROGRESS_SERVICE_URL}/progress/enrollments/me`, req, {
+      enrollments: []
+    })]);
     const profile = profileResponse.data?.studentProfile || profileResponse.data?.profile || profileResponse.data || {};
     const attempts = Array.isArray(attemptsResponse.data) ? attemptsResponse.data : attemptsResponse.data?.attempts || [];
     const courses = Array.isArray(coursesResponse.data) ? coursesResponse.data : coursesResponse.data?.courses || [];
