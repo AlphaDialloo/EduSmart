@@ -1228,6 +1228,7 @@ exports.enrollFreeCourse = async (req, res) => {
     });
     if (existingEnrollment) {
       existingEnrollment.status = "ACTIVE";
+      existingEnrollment.paymentId = undefined;
       existingEnrollment.accessPlanId = null;
       existingEnrollment.planType = "FREE";
       existingEnrollment.durationMonths = null;
@@ -1262,6 +1263,20 @@ exports.enrollFreeCourse = async (req, res) => {
       created: true
     });
   } catch (error) {
+    if (error?.code === 11000) {
+      const studentId = req.user?.id || req.user?.userId || req.user?.sub;
+      const existingEnrollment = await CourseEnrollment.findOne({
+        courseId: req.params.courseId,
+        studentId
+      });
+      if (existingEnrollment) {
+        return res.status(200).json({
+          message: "Vous êtes déjà inscrit à ce cours.",
+          enrollment: existingEnrollment,
+          created: false
+        });
+      }
+    }
     return sendError(res, error);
   }
 };
