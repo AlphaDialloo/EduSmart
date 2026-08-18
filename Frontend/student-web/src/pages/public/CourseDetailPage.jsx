@@ -109,14 +109,6 @@ function CourseDetailPage() {
         navigate("/student/courses");
       }, 700);
     } catch (requestError) {
-      const responseMessage = requestError.response?.data?.message || "";
-      if (requestError.response?.status === 409 && responseMessage.toLowerCase().includes("identique")) {
-        setCartMessage("Vous êtes déjà inscrit à ce cours.");
-        window.setTimeout(() => {
-          navigate("/student/courses");
-        }, 700);
-        return;
-      }
       setError(requestError.code === "ECONNABORTED" ? "Le serveur met du temps à démarrer. Réessayez dans quelques secondes." : requestError.response?.data?.message || requestError.message || "Impossible de vous inscrire gratuitement à ce cours.");
     } finally {
       setFreeEnrollmentLoading(false);

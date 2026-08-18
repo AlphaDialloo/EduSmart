@@ -1222,13 +1222,14 @@ exports.enrollFreeCourse = async (req, res) => {
       assignmentCorrection: false,
       certificateAccess: true
     };
+    const freeEnrollmentReference = `FREE:${course._id}:${studentId}`;
     const existingEnrollment = await CourseEnrollment.findOne({
       courseId: course._id,
       studentId
     });
     if (existingEnrollment) {
       existingEnrollment.status = "ACTIVE";
-      existingEnrollment.paymentId = undefined;
+      existingEnrollment.paymentId = freeEnrollmentReference;
       existingEnrollment.accessPlanId = null;
       existingEnrollment.planType = "FREE";
       existingEnrollment.durationMonths = null;
@@ -1248,6 +1249,7 @@ exports.enrollFreeCourse = async (req, res) => {
     const enrollment = await CourseEnrollment.create({
       courseId: course._id,
       studentId,
+      paymentId: freeEnrollmentReference,
       accessPlanId: null,
       planType: "FREE",
       durationMonths: null,
