@@ -143,6 +143,7 @@ CREATE TABLE IF NOT EXISTS progress_service.resource_progress (
     progress_percentage NUMERIC(5,2) NOT NULL DEFAULT 0
         CHECK (progress_percentage BETWEEN 0 AND 100),
     completed BOOLEAN NOT NULL DEFAULT FALSE,
+    completed_at TIMESTAMP,
     last_accessed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
