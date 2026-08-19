@@ -1,8 +1,12 @@
 const router = require('express').Router();
 const c = require('../controllers/user.controller');
 const {
-  authenticate
+  authenticate,
+  authorize
 } = require('../middlewares/auth.middleware');
+router.get('/admin/summary', authenticate, authorize('ADMIN'), c.adminSummary);
+router.get('/admin', authenticate, authorize('ADMIN'), c.adminList);
+router.patch('/admin/:userId', authenticate, authorize('ADMIN'), c.adminUpdate);
 router.get('/profile', authenticate, c.getProfile);
 router.put('/profile/student', authenticate, c.updateProfile);
 router.post('/preferences', authenticate, c.addPreference);

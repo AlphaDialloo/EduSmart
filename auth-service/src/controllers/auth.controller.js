@@ -29,6 +29,11 @@ exports.register = async (req, res) => {
         message: "Champs obligatoires manquants"
       });
     }
+    if (!['STUDENT', 'INSTRUCTOR'].includes(role)) {
+      return res.status(400).json({
+        message: "Rôle invalide"
+      });
+    }
     await client.query("BEGIN");
     const exists = await client.query("SELECT id FROM auth_service.users WHERE email = $1", [email]);
     if (exists.rows.length) {
@@ -117,6 +122,7 @@ exports.login = async (req, res) => {
           u.first_name,
           u.last_name,
           u.email,
+          u.status,
           u.password_hash,
           r.name AS role
         FROM auth_service.users u
@@ -132,6 +138,11 @@ exports.login = async (req, res) => {
       });
     }
     const databaseUser = result.rows[0];
+    if (databaseUser.status !== "ACTIVE") {
+      return res.status(403).json({
+        message: "Compte désactivé"
+      });
+    }
     const passwordIsValid = await bcrypt.compare(password, databaseUser.password_hash);
     if (!passwordIsValid) {
       return res.status(401).json({

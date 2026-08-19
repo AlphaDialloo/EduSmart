@@ -155,9 +155,6 @@ export default function AdminUsersPage() {
               Administrateurs
             </option>
 
-            <option value="SUPER_ADMIN">
-              Super administrateurs
-            </option>
           </select>
         </div>
       </section>
@@ -230,9 +227,6 @@ export default function AdminUsersPage() {
                             Administrateur
                           </option>
 
-                          <option value="SUPER_ADMIN">
-                            Super administrateur
-                          </option>
                         </select>
                       </td>
 
