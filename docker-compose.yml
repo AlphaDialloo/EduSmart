@@ -83,6 +83,8 @@ services:
     build: ./course-service
     container_name: edusmart_course_service
     restart: unless-stopped
+    env_file:
+      - ./course-service/.env
     ports:
       - "4003:4003"
     environment:
