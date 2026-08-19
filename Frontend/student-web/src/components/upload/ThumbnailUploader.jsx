@@ -13,13 +13,17 @@ export default function ThumbnailUploader({
   const inputRef = useRef();
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [error, setError] = useState("");
   async function chooseFile(event) {
     const file = event.target.files?.[0];
     if (!file) return;
     try {
+      setError("");
       setUploading(true);
       const result = await uploadImage(token, file, setProgress);
       onChange(result.file);
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Impossible de téléverser cette image.");
     } finally {
       setUploading(false);
       setProgress(0);
@@ -42,6 +46,8 @@ export default function ThumbnailUploader({
       <input hidden ref={inputRef} type="file" accept="image/*" onChange={chooseFile} />
 
       {uploading && <UploadProgress progress={progress} />}
+
+      {error && <p className="rounded-xl bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</p>}
 
       {value?.url && <button type="button" onClick={() => onChange(null)} className="flex items-center gap-2 rounded-xl bg-red-500 px-4 py-3 font-bold text-white">
           <Trash2 size={18} />

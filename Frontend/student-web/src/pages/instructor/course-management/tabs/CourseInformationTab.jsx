@@ -1,5 +1,6 @@
 import { LoaderCircle, Save } from "lucide-react";
 import { useEffect, useState } from "react";
+import ThumbnailUploader from "../../../../components/upload/ThumbnailUploader";
 const emptyForm = {
   title: "",
   description: "",
@@ -7,7 +8,7 @@ const emptyForm = {
   level: "BEGINNER",
   language: "fr",
   tags: "",
-  thumbnailUrl: ""
+  thumbnail: null
 };
 export default function CourseInformationTab({
   course,
@@ -23,7 +24,7 @@ export default function CourseInformationTab({
       level: course?.level || "BEGINNER",
       language: course?.language || "fr",
       tags: Array.isArray(course?.tags) ? course.tags.join(", ") : "",
-      thumbnailUrl: course?.thumbnail?.url || ""
+      thumbnail: course?.thumbnail?.url ? course.thumbnail : null
     });
   }, [course]);
   const change = event => {
@@ -45,11 +46,10 @@ export default function CourseInformationTab({
       level: form.level,
       language: form.language.trim().toLowerCase(),
       tags: form.tags.split(",").map(tag => tag.trim()).filter(Boolean),
-      thumbnail: {
-        url: form.thumbnailUrl.trim() || null,
-        publicId: course?.thumbnail?.publicId || null,
+      thumbnail: form.thumbnail ? {
+        ...form.thumbnail,
         altText: form.title.trim()
-      }
+      } : null
     });
   };
   return <form onSubmit={submit} className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
@@ -93,10 +93,13 @@ export default function CourseInformationTab({
           Tags
           <input name="tags" value={form.tags} onChange={change} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3.5" />
         </label>
-        <label className="sm:col-span-2 text-sm font-bold text-slate-700">
-          URL miniature
-          <input name="thumbnailUrl" type="url" value={form.thumbnailUrl} onChange={change} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3.5" />
-        </label>
+        <div className="sm:col-span-2">
+          <p className="mb-2 text-sm font-bold text-slate-700">Miniature du cours</p>
+          <ThumbnailUploader value={form.thumbnail} onChange={thumbnail => setForm(current => ({
+            ...current,
+            thumbnail
+          }))} />
+        </div>
       </div>
     </form>;
 }
