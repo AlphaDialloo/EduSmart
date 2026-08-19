@@ -1,4 +1,4 @@
-import { BookOpen, CircleDollarSign, FolderPlus, GraduationCap, LoaderCircle, Plus, UsersRound } from "lucide-react";
+import { BookOpen, CircleDollarSign, FolderPlus, GraduationCap, LoaderCircle, UsersRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { useAuth } from "../../contexts/AuthContext";
@@ -140,9 +140,9 @@ export default function AdminDashboardPage() {
               Créer une catégorie
             </Link>
 
-            <Link to="/instructor/courses/new" className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3.5 font-black text-white shadow-lg shadow-emerald-200 transition hover:bg-emerald-700">
-              <Plus size={20} />
-              Créer un cours
+            <Link to="/admin/courses" className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3.5 font-black text-white shadow-lg shadow-emerald-200 transition hover:bg-emerald-700">
+              <BookOpen size={20} />
+              Gérer les cours
             </Link>
           </div>
         </div>
