@@ -35,6 +35,7 @@ function Navbar() {
     isAuthenticated,
     logout
   } = useAuth();
+  const canPurchaseCourses = !isAuthenticated || user?.role === "STUDENT";
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const menuRef = useRef(null);
   const getNavLinkClass = ({
@@ -119,13 +120,13 @@ function Navbar() {
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          <Link to="/cart" aria-label={`Ouvrir le panier, ${itemCount} article${itemCount > 1 ? "s" : ""}`} className="relative flex size-11 items-center justify-center rounded-xl text-slate-600 transition hover:bg-emerald-50 hover:text-emerald-600">
-            <ShoppingCart size={21} />
+          {canPurchaseCourses && <Link to="/cart" aria-label={`Ouvrir le panier, ${itemCount} article${itemCount > 1 ? "s" : ""}`} className="relative flex size-11 items-center justify-center rounded-xl text-slate-600 transition hover:bg-emerald-50 hover:text-emerald-600">
+              <ShoppingCart size={21} />
 
-            {itemCount > 0 && <span className="absolute right-0.5 top-0.5 flex size-5 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-bold text-white">
-                {itemCount > 9 ? "9+" : itemCount}
-              </span>}
-          </Link>
+              {itemCount > 0 && <span className="absolute right-0.5 top-0.5 flex size-5 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-bold text-white">
+                  {itemCount > 9 ? "9+" : itemCount}
+                </span>}
+            </Link>}
 
           {!isAuthenticated ? <>
               <Link to="/login" className="hidden rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 sm:block">

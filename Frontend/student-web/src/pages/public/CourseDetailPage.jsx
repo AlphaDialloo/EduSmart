@@ -15,8 +15,11 @@ function CourseDetailPage() {
     addToCart
   } = useCart();
   const {
-    token
+    token,
+    user,
+    isAuthenticated
   } = useAuth();
+  const canEnroll = !isAuthenticated || user?.role === "STUDENT";
   const [course, setCourse] = useState(null);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -275,7 +278,17 @@ function CourseDetailPage() {
               convient.
             </p>
 
-            {course.isFree ? <div className="mt-6 rounded-2xl bg-emerald-50 p-6">
+            {!canEnroll ? <div className="mt-6 rounded-2xl bg-slate-100 p-6 text-center">
+                <BookOpen size={30} className="mx-auto text-emerald-600" />
+
+                <p className="mt-3 font-black text-slate-900">
+                  Consultation du cours
+                </p>
+
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  L’achat et l’inscription sont réservés aux comptes étudiants.
+                </p>
+              </div> : course.isFree ? <div className="mt-6 rounded-2xl bg-emerald-50 p-6">
                 <CheckCircle2 size={30} className="text-emerald-600" />
 
                 <p className="mt-3 text-2xl font-black text-emerald-900">
@@ -295,7 +308,7 @@ function CourseDetailPage() {
                 {activePlans.map(plan => <PricingPlanCard key={plan._id} plan={plan} currency={course.currency} isSelected={selectedPlan?._id === plan._id} onSelect={setSelectedPlan} />)}
               </div>}
 
-            {!course.isFree && <button type="button" disabled={!selectedPlan} onClick={handleAddToCart} className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 py-4 font-black text-white shadow-lg shadow-emerald-200 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">
+            {canEnroll && !course.isFree && <button type="button" disabled={!selectedPlan} onClick={handleAddToCart} className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 py-4 font-black text-white shadow-lg shadow-emerald-200 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">
                 <ShoppingCart size={20} />
                 Ajouter ce plan au panier
               </button>}
@@ -305,7 +318,7 @@ function CourseDetailPage() {
               </div>}
 
             <div className="mt-6 border-t border-slate-200 pt-5 text-center text-xs leading-5 text-slate-500">
-              {course.isFree ? "Accès immédiat après l’inscription." : "Paiement sécurisé. L’accès commence après la confirmation du paiement."}
+              {!canEnroll ? "Utilisez un compte étudiant pour suivre cette formation." : course.isFree ? "Accès immédiat après l’inscription." : "Paiement sécurisé. L’accès commence après la confirmation du paiement."}
             </div>
           </div>
         </aside>
